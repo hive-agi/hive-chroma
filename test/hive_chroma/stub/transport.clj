@@ -1,5 +1,5 @@
-(ns hive-mcp.test.stub.chroma-transport
-  "In-memory `IChromaTransport`, so the Chroma adapter (hive-mcp.chroma.* and
+(ns hive-chroma.stub.transport
+  "In-memory `IChromaTransport`, so the Chroma adapter (hive-chroma.* and
    ChromaMemoryStore) runs with no Chroma server.
 
    It stands in for the vendor client at the transport seam, below every line
@@ -15,7 +15,7 @@
    - `query` answers records nearest first with an ascending `:distance`;
    - `get-collection` of an unknown name answers nil."
   (:require [clojure.string :as str]
-            [hive-mcp.chroma.client :as client]))
+            [hive-chroma.client :as client]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;

@@ -1,4 +1,4 @@
-(ns hive-mcp.chroma.gate-property-test
+(ns hive-chroma.gate-property-test
   "Property-based + golden tests for the Chroma concurrency gate.
 
    Pins the anti-hang invariants:
@@ -18,7 +18,7 @@
             [clojure.test.check.clojure-test :refer [defspec]]
             [hive-weave.gate :as g]
             [hive-dsl.result :as r]
-            [hive-mcp.chroma.gate :as cg]))
+            [hive-chroma.gate :as cg]))
 
 ;; =============================================================================
 ;; Generators

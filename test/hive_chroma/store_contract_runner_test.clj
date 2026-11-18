@@ -1,9 +1,9 @@
-(ns hive-mcp.memory.store.chroma-contract-runner-test
+(ns hive-chroma.store-contract-runner-test
   "Runs the backend-agnostic IMemoryStore contract (hive-test) against
    ChromaMemoryStore.
 
    DEFAULT TIER: ChromaMemoryStore over the in-memory IChromaTransport
-   (hive-mcp.test.stub.chroma-transport), so the adapter is held to the
+   (hive-chroma.stub.transport), so the adapter is held to the
    contract with no Chroma server. The e2e tier rebinds *backend* to a
    throwaway Chroma container (test-e2e/hive_mcp/e2e/chroma_test.clj) and runs
    these same deftests, which is what proves the stub faithful
@@ -19,14 +19,14 @@
    is removed instead of silently lingering."
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [hive-test.memory.store-contract :as contract]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.connection :as chroma-conn]
-            [hive-mcp.config.test-support :as cfg]
+            [hive-chroma.client :as client]
+            [hive-chroma.connection :as chroma-conn]
+            [hive-chroma.test.fixtures :as cfg]
             [hive-mcp.embeddings.active :as active]
-            [hive-mcp.memory.store.chroma :as chroma-store]
+            [hive-chroma.store :as chroma-store]
             [hive-mcp.protocols.memory :as proto]
-            [hive-mcp.test-fixtures :as fixtures]
-            [hive-mcp.test.stub.chroma-transport :as transport]))
+            [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.stub.transport :as transport]))
 
 ;; =============================================================================
 ;; Fixtures

@@ -1,24 +1,26 @@
-(ns hive-mcp.chroma.core
+(ns hive-chroma.core
   "Chroma vector database integration for semantic memory search.
 
    Thin facade that delegates to sub-modules for modularity (<200 LOC each):
-   - hive-mcp.chroma.embeddings  — Embedding provider protocol and management
-   - hive-mcp.chroma.connection  — Configuration, collections, status
-   - hive-mcp.chroma.helpers     — Shared utilities (serialization, metadata)
-   - hive-mcp.chroma.crud        — Memory entry CRUD operations
-   - hive-mcp.chroma.search      — Semantic search
-   - hive-mcp.chroma.maintenance — Cleanup and expiration
+   - hive-chroma.embeddings  — Embedding provider protocol and management
+   - hive-chroma.connection  — Configuration, collections, status
+   - hive-chroma.helpers     — Shared utilities (serialization, metadata)
+   - hive-chroma.crud        — Memory entry CRUD operations
+   - hive-chroma.search      — Semantic search
+   - hive-chroma.maintenance — Cleanup and expiration
 
    All public vars are re-exported here as the canonical entry point.
-   Require as: [hive-mcp.chroma.core :as chroma]."
-  (:require [hive-mcp.embeddings.active :as emb]
-            [hive-mcp.chroma.connection :as conn]
-            [hive-mcp.chroma.gate :as gate]
-            [hive-mcp.chroma.helpers :as h]
-            [hive-mcp.chroma.crud :as crud]
-            [hive-mcp.chroma.search :as search]
-            [hive-mcp.chroma.maintenance :as maint]
-            [hive-mcp.protocols.memory :as pmem]
+   Require as: [hive-chroma.core :as chroma]."
+  (:require [hive-chroma.host :as emb]
+            [hive-chroma.connection :as conn]
+            [hive-chroma.gate :as gate]
+            [hive-chroma.helpers :as h]
+            [hive-chroma.crud :as crud]
+            [hive-chroma.search :as search]
+            [hive-chroma.maintenance :as maint]
+            [hive-spi.memory.ports :as pmem]
+            [hive-spi.memory.registry :as reg]
+            [hive-spi.embeddings.ports :as emb-ports]
             [malli.core :as m]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -38,7 +40,7 @@
   [:map [:id :any]])
 
 ;;; --- Embedding Provider Protocol ---
-(def EmbeddingProvider emb/EmbeddingProvider)
+(def EmbeddingProvider emb-ports/EmbeddingProvider)
 (def embed-text emb/embed-text)
 (def embed-batch emb/embed-batch)
 (def embedding-dimension emb/embedding-dimension)
@@ -58,7 +60,6 @@
 (def reset-collection-cache! #'conn/reset-collection-cache!)
 (def status #'conn/status)
 (def chroma-available? #'conn/chroma-available?)
-(def reinitialize-embeddings! #'conn/reinitialize-embeddings!)
 
 ;;; --- Content Hashing ---
 (def content-hash #'h/content-hash)
@@ -70,8 +71,8 @@
 (defn index-memory-entry!
   "Add an entry. Dispatches to active IMemoryStore via add-entry!."
   [entry]
-  (if (pmem/store-set?)
-    (pmem/add-entry! (pmem/get-store) entry)
+  (if (reg/store-set?)
+    (pmem/add-entry! (reg/get-store) entry)
     (crud/index-memory-entry! entry)))
 
 (m/=> index-memory-entry! [:=> [:cat :map] :string])
@@ -79,8 +80,8 @@
 (defn get-entry-by-id
   "Fetch entry by id. Dispatches to active IMemoryStore via get-entry."
   [id]
-  (if (pmem/store-set?)
-    (pmem/get-entry (pmem/get-store) id)
+  (if (reg/store-set?)
+    (pmem/get-entry (reg/get-store) id)
     (crud/get-entry-by-id id)))
 
 (m/=> get-entry-by-id [:=> [:cat :any] [:maybe StoredEntry]])
@@ -88,8 +89,8 @@
 (defn query-entries
   "Query entries. Legacy kwargs coerced to opts map for protocol."
   [& {:as opts}]
-  (if (pmem/store-set?)
-    (pmem/query-entries (pmem/get-store) opts)
+  (if (reg/store-set?)
+    (pmem/query-entries (reg/get-store) opts)
     (apply crud/query-entries (mapcat identity opts))))
 
 (m/=> query-entries [:=> [:cat KwOpts] [:sequential StoredEntry]])
@@ -97,8 +98,8 @@
 (defn update-entry!
   "Update entry fields. Dispatches to active IMemoryStore."
   [id updates]
-  (if (pmem/store-set?)
-    (pmem/update-entry! (pmem/get-store) id updates)
+  (if (reg/store-set?)
+    (pmem/update-entry! (reg/get-store) id updates)
     (crud/update-entry! id updates)))
 
 (m/=> update-entry! [:=> [:cat :any [:maybe :map]] [:maybe StoredEntry]])
@@ -106,8 +107,8 @@
 (defn delete-entry!
   "Delete entry by id. Dispatches to active IMemoryStore."
   [id]
-  (if (pmem/store-set?)
-    (pmem/delete-entry! (pmem/get-store) id)
+  (if (reg/store-set?)
+    (pmem/delete-entry! (reg/get-store) id)
     (crud/delete-entry! id)))
 
 ;; The port answers true; the chroma.crud fallback answers the id it deleted.
@@ -116,8 +117,8 @@
 (defn find-duplicate
   "Find duplicate by content-hash. Kwargs form → opts map for protocol."
   [type content-hash & {:as opts}]
-  (if (pmem/store-set?)
-    (pmem/find-duplicate (pmem/get-store) type content-hash (or opts {}))
+  (if (reg/store-set?)
+    (pmem/find-duplicate (reg/get-store) type content-hash (or opts {}))
     (apply crud/find-duplicate type content-hash (mapcat identity (or opts {})))))
 
 (m/=> find-duplicate [:=> [:cat :any [:maybe :string] KwOpts] [:maybe StoredEntry]])
@@ -133,8 +134,8 @@
 (defn search-similar
   "Semantic similarity search. Kwargs → opts map for protocol."
   [query-text & {:as opts}]
-  (if (pmem/store-set?)
-    (pmem/search-similar (pmem/get-store) query-text (or opts {}))
+  (if (reg/store-set?)
+    (pmem/search-similar (reg/get-store) query-text (or opts {}))
     (apply search/search-similar query-text (mapcat identity (or opts {})))))
 
 (m/=> search-similar [:=> [:cat :string KwOpts] [:sequential StoredEntry]])
@@ -146,8 +147,8 @@
 (defn cleanup-expired!
   "Delete all expired entries via active IMemoryStore."
   []
-  (if (pmem/store-set?)
-    (pmem/cleanup-expired! (pmem/get-store))
+  (if (reg/store-set?)
+    (pmem/cleanup-expired! (reg/get-store))
     (maint/cleanup-expired!)))
 
 (m/=> cleanup-expired! [:=> [:cat] [:map [:count [:int {:min 0}]] [:deleted-ids [:sequential :any]]]])
@@ -155,8 +156,8 @@
 (defn entries-expiring-soon
   "Entries expiring within N days. Kwargs → opts map for protocol."
   [days & {:as opts}]
-  (if (pmem/store-set?)
-    (pmem/entries-expiring-soon (pmem/get-store) days (or opts {}))
+  (if (reg/store-set?)
+    (pmem/entries-expiring-soon (reg/get-store) days (or opts {}))
     (apply maint/entries-expiring-soon days (mapcat identity (or opts {})))))
 
 (m/=> entries-expiring-soon [:=> [:cat number? KwOpts] [:sequential StoredEntry]])

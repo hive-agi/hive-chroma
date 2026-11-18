@@ -1,10 +1,10 @@
-(ns hive-mcp.memory-chroma-test
-  "The Chroma memory adapter (hive-mcp.chroma.core) end to end through its
+(ns hive-chroma.memory-test
+  "The Chroma memory adapter (hive-chroma.core) end to end through its
    transport seam: CRUD, semantic search, durations, scope tags, dedup,
    collection stats, error paths and the document format.
 
    DEFAULT TIER: the transport is the in-memory IChromaTransport
-   (hive-mcp.test.stub.chroma-transport), so no Chroma server is reached. The
+   (hive-chroma.stub.transport), so no Chroma server is reached. The
    adapter code above the seam is the production code, unchanged.
 
    The SAME tests run against a real Chroma in the e2e tier
@@ -15,12 +15,12 @@
    wrote test entries into whatever Chroma answered there."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.string :as str]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.connection :as chroma-conn]
-            [hive-mcp.chroma.core :as chroma]
-            [hive-mcp.config.test-support :as cfg]
-            [hive-mcp.test-fixtures :as fixtures]
-            [hive-mcp.test.stub.chroma-transport :as transport]))
+            [hive-chroma.client :as client]
+            [hive-chroma.connection :as chroma-conn]
+            [hive-chroma.core :as chroma]
+            [hive-chroma.test.fixtures :as cfg]
+            [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.stub.transport :as transport]))
 
 ;; =============================================================================
 ;; Test Fixtures and Helpers
@@ -105,7 +105,7 @@
       ;; set-embedding-provider! wraps the provider in the shared admission
       ;; gate, so status names the gate; the mock is its delegate.
       (is (some? (:provider status)))
-      (is (instance? hive_mcp.test_fixtures.MockEmbedder
+      (is (instance? hive_chroma.test.fixtures.MockEmbedder
                      (:delegate (chroma/get-embedding-provider)))))))
 
 (deftest test-mock-embedder-produces-deterministic-vectors

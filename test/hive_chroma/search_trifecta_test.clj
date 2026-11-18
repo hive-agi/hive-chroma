@@ -1,15 +1,15 @@
-(ns hive-mcp.chroma.search-trifecta-test
+(ns hive-chroma.search-trifecta-test
   "The pure where-clause builders as schema trifectas, and the search
    entry points under instrumentation against the in-memory transport."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.connection :as conn]
-            [hive-mcp.chroma.crud :as crud]
-            [hive-mcp.chroma.search :as search]
-            [hive-mcp.config.test-support :as cfg]
+            [hive-chroma.client :as client]
+            [hive-chroma.connection :as conn]
+            [hive-chroma.crud :as crud]
+            [hive-chroma.search :as search]
+            [hive-chroma.test.fixtures :as cfg]
             [hive-mcp.embeddings.active :as active]
-            [hive-mcp.test-fixtures :as fixtures]
-            [hive-mcp.test.stub.chroma-transport :as transport]
+            [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.stub.transport :as transport]
             [hive-schemas.test :refer [deftrifecta-from-schema]]
             [malli.core :as m]
             [malli.instrument :as mi]))
@@ -45,7 +45,7 @@
    [:project-ids {:optional true} [:maybe [:vector {:gen/max 3} [:enum "p1" "p2" "global"]]]]])
 
 (deftrifecta-from-schema where-clause
-  hive-mcp.chroma.search/build-where-clause
+  hive-chroma.search/build-where-clause
   {:in Filters
    :out search/WhereClause
    :rel (fn [{:keys [type project-ids]} out]
@@ -56,7 +56,7 @@
    :num-tests 200})
 
 (deftrifecta-from-schema where-document-clause
-  hive-mcp.chroma.search/build-where-document-clause
+  hive-chroma.search/build-where-document-clause
   {:in [:maybe [:vector {:gen/max 4} [:enum "a" "b" "c" "scope:x"]]]
    :out search/WhereDocumentClause
    :rel (fn [tags out]

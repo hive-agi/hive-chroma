@@ -1,8 +1,8 @@
-(ns hive-mcp.chroma.client-test
+(ns hive-chroma.client-test
   "DIP: the Chroma transport seam is exercised against a concrete stub
    IChromaTransport, never the live vendor client."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-mcp.chroma.client :as cc]
+            [hive-chroma.client :as cc]
             [hive-test.golden :refer [deftest-golden]]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -75,7 +75,7 @@
   (is (satisfies? cc/IChromaTransport (cc/transport))))
 
 (deftest-golden seam-dispatch-golden
-  "test/golden/hive-mcp/chroma/client-seam-dispatch.edn"
+  "test/golden/hive-chroma/client-seam-dispatch.edn"
   ;; Every public op's answer and the call it forwarded to the injected
   ;; transport, in order: the seam's whole observable contract.
   (let [answers [(cc/configure {:host "h" :port 8000})

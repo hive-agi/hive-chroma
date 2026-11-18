@@ -1,18 +1,18 @@
-(ns hive-mcp.chroma.core-contract-test
+(ns hive-chroma.core-contract-test
   "The chroma.core facade under instrumentation, down both of its routes:
    an active IMemoryStore (the atom-backed stub) and the concrete
    chroma.crud fallback over the in-memory transport."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.connection :as conn]
-            [hive-mcp.chroma.core :as core]
-            [hive-mcp.chroma.helpers :as h]
-            [hive-mcp.config.test-support :as cfg]
+            [hive-chroma.client :as client]
+            [hive-chroma.connection :as conn]
+            [hive-chroma.core :as core]
+            [hive-chroma.helpers :as h]
+            [hive-chroma.test.fixtures :as cfg]
             [hive-mcp.embeddings.active :as active]
             [hive-mcp.protocols.memory :as pmem]
-            [hive-mcp.test-fixtures :as fixtures]
-            [hive-mcp.test.stub.chroma-transport :as transport]
-            [hive-mcp.test.stub.memory-store :as stub]
+            [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.stub.transport :as transport]
+            [hive-chroma.test.memory-store :as stub]
             [hive-test.golden :refer [deftest-golden]]
             [malli.instrument :as mi]))
 

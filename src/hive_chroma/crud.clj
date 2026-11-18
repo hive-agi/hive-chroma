@@ -1,11 +1,11 @@
-(ns hive-mcp.chroma.crud
+(ns hive-chroma.crud
   "Core CRUD operations for Chroma memory entries."
-  (:require [hive-mcp.chroma.client :as chroma]
-            [hive-mcp.chroma.connection :as conn]
-            [hive-mcp.embeddings.active :as emb]
-            [hive-mcp.chroma.gate :as gate]
-            [hive-mcp.chroma.helpers :as h]
-            [hive-mcp.embeddings.service :as embedding-service]
+  (:require [hive-chroma.client :as chroma]
+            [hive-chroma.connection :as conn]
+            [hive-chroma.host :as emb]
+            [hive-chroma.gate :as gate]
+            [hive-chroma.helpers :as h]
+            [hive-chroma.host :as embedding-service]
             [taoensso.timbre :as log] [hive-dsl.result :refer [rescue]]
             [malli.core :as m]))
 

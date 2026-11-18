@@ -1,4 +1,4 @@
-(ns hive-mcp.chroma.helpers
+(ns hive-chroma.helpers
   "Shared utility functions for Chroma operations."
   (:require [clojure.data.json :as json]
             [clojure.string :as str] [hive-dsl.result :refer [rescue]]

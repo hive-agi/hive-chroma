@@ -1,11 +1,11 @@
-(ns hive-mcp.chroma.maintenance
+(ns hive-chroma.maintenance
   "Cleanup, repair, and expiration management for Chroma entries."
-  (:require [hive-mcp.chroma.client :as chroma]
-            [hive-mcp.chroma.connection :as conn]
-            [hive-mcp.chroma.crud :as crud]
-            [hive-mcp.embeddings.active :as emb]
-            [hive-mcp.chroma.gate :as gate]
-            [hive-mcp.chroma.helpers :as h]
+  (:require [hive-chroma.client :as chroma]
+            [hive-chroma.connection :as conn]
+            [hive-chroma.crud :as crud]
+            [hive-chroma.host :as emb]
+            [hive-chroma.gate :as gate]
+            [hive-chroma.helpers :as h]
             [taoensso.timbre :as log]
             [malli.core :as m]))
 

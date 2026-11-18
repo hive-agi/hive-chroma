@@ -1,13 +1,13 @@
-(ns hive-mcp.chroma.vector-store-test
+(ns hive-chroma.vector-store-test
   "The Chroma IVectorCollectionStore adapter over INJECTED transports (DIP):
    a recording transport pins the option translation (port names -> vendor
    names) and the three result shapes await! resolves; the in-memory
    transport pins the port behaviour end to end. No vendor, no with-redefs."
   (:require [clojure.test :refer [deftest is]]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.vector-store :as vs]
+            [hive-chroma.client :as client]
+            [hive-chroma.vector-store :as vs]
             [hive-mcp.protocols.vector :as vp]
-            [hive-mcp.test.stub.chroma-transport :as transport]
+            [hive-chroma.stub.transport :as transport]
             [hive-test.golden :refer [deftest-golden]]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -58,13 +58,13 @@
     {:out out :calls @calls}))
 
 (deftest-golden adapter-translation-golden
-  "test/golden/hive-mcp/chroma/vector-store-translation.edn"
+  "test/golden/hive-chroma/vector-store-translation.edn"
   ;; The three result shapes must yield the same port answers; the golden
   ;; holds all three so a shape-specific regression shows as a diff.
   {:future (drive :future) :deref (drive :deref) :plain (drive :plain)})
 
 (deftest-golden adapter-over-in-memory-transport-golden
-  "test/golden/hive-mcp/chroma/vector-store-in-memory.edn"
+  "test/golden/hive-chroma/vector-store-in-memory.edn"
   (let [store (vs/chroma-vector-store (transport/->transport))
         c     (vp/-create-collection store "vs" {:get-or-create? true :metadata {:dimension 2}})]
     (vp/-add store c [{:id "x" :embedding [0.0 0.0] :document "X" :metadata {:k "a"}}

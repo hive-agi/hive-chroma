@@ -1,16 +1,16 @@
-(ns hive-mcp.chroma.maintenance-contract-test
+(ns hive-chroma.maintenance-contract-test
   "Expiry cleanup and the expiring-soon window under instrumentation over the
    in-memory transport: entries are seeded with known durations and expiry
    instants, and the outcome is pinned as a golden."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.connection :as conn]
-            [hive-mcp.chroma.crud :as crud]
-            [hive-mcp.chroma.maintenance :as maint]
-            [hive-mcp.config.test-support :as cfg]
+            [hive-chroma.client :as client]
+            [hive-chroma.connection :as conn]
+            [hive-chroma.crud :as crud]
+            [hive-chroma.maintenance :as maint]
+            [hive-chroma.test.fixtures :as cfg]
             [hive-mcp.embeddings.active :as active]
-            [hive-mcp.test-fixtures :as fixtures]
-            [hive-mcp.test.stub.chroma-transport :as transport]
+            [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.stub.transport :as transport]
             [hive-test.golden :refer [deftest-golden]]
             [malli.core :as m]
             [malli.instrument :as mi]))

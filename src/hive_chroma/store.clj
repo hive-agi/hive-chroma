@@ -1,22 +1,22 @@
-(ns hive-mcp.memory.store.chroma
+(ns hive-chroma.store
   "ChromaDB implementation of IMemoryStore protocol.
 
-   Wraps existing hive-mcp.chroma.core functions into protocol methods.
+   Wraps existing hive-chroma.core functions into protocol methods.
    This is Phase 1 of vectordb abstraction - enabling pluggable backends
    later (e.g., Milvus, DataScript-for-testing).
 
    DDD: Repository pattern - ChromaMemoryStore is the Chroma aggregate adapter."
   (:require [malli.core :as m]
-            [hive-mcp.protocols.memory :as proto]
-            [hive-mcp.chroma.core :as chroma]
-            [hive-mcp.chroma.crud :as ccrud]
-            [hive-mcp.chroma.search :as csearch]
-            [hive-mcp.chroma.maintenance :as cmaint]
-            [hive-mcp.dns.result :as result]
+            [hive-spi.memory.ports :as proto]
+            [hive-chroma.core :as chroma]
+            [hive-chroma.crud :as ccrud]
+            [hive-chroma.search :as csearch]
+            [hive-chroma.maintenance :as cmaint]
+            [hive-dsl.result :as result]
             [taoensso.timbre :as log]
             [clojure.string :as str]
             [hive-spi.memory.ports :as ports]
-            [hive-mcp.chroma.helpers :as h]))
+            [hive-chroma.helpers :as h]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -378,7 +378,7 @@
 ;;                     true, otherwise false. No polling because there's
 ;;                     no async heal loop to wait on.
 
-(require '[hive-mcp.protocols.memory-liveness :as liveness])
+(require '[hive-spi.memory.ports :as liveness])
 
 (extend-protocol liveness/IMemoryStoreLiveness
   ChromaMemoryStore

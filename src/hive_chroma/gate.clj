@@ -1,4 +1,4 @@
-(ns hive-mcp.chroma.gate
+(ns hive-chroma.gate
   "Concurrency gates for ChromaDB reads/writes and the shared embed port.
 
    ChromaDB uses SQLite internally: read (4 permits) and write (1 permit)
@@ -6,7 +6,7 @@
    provider gate from embeddings.shared-gate, never a Chroma-only pool.
    Do not nest with-embedding-gate around a decorated provider call."
   (:require [hive-weave.gate :as g]
-            [hive-mcp.embeddings.shared-gate :as shared]
+            [hive-chroma.host :as host]
             [malli.core :as m]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -70,25 +70,29 @@
 
 (defmacro with-embedding-gate
   "Legacy macro for callers outside the EmbeddingProvider port. Never wrap a
-   decorated provider call with it: admission there already owns the permit."
+   decorated provider call with it: admission there already owns the permit.
+   Admits through the host's ONE process-wide embedding gate; with no host,
+   the body runs ungated (there is no provider to protect)."
   [& body]
-  `(shared/with-permit shared/process-gate shared/*lane* (fn [] ~@body)))
+  `(host/with-permit (host/process-gate) (host/lane) (fn [] ~@body)))
 
 ;; =============================================================================
 ;; Diagnostics
 ;; =============================================================================
 
 (defn gate-stats
-  "Current state of Chroma read/write and the one shared embedding provider gate."
+  "Current state of Chroma read/write and the one shared embedding provider
+   gate. With no host the embed gate reports one permit, all available."
   []
-  (let [embed shared/process-gate
-        active @(:active embed)
-        waiting @(:waiting embed)]
+  (let [embed   (host/process-gate)
+        permits (or (:permits embed) 1)
+        active  (if embed @(:active embed) 0)
+        waiting (if embed @(:waiting embed) {})]
     {:read (g/gate-stats read-gate)
      :write (g/gate-stats write-gate)
      :embed {:name "embedding-provider"
-             :permits (:permits embed)
-             :available (- (:permits embed) active)
-             :queue-length (reduce + (vals waiting))}}))
+             :permits permits
+             :available (- permits active)
+             :queue-length (reduce + 0 (vals waiting))}}))
 
 (m/=> gate-stats [:=> [:cat] GateStats])
