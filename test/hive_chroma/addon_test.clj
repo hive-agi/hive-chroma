@@ -21,7 +21,10 @@
 
 (defn- chroma-without-server [f]
   (let [prior-transport (client/transport)
-        prior-provider  (active/get-embedding-provider)]
+        prior-provider  (active/get-embedding-provider)
+        ;; initialize! calls conn/configure!, a process-wide merge: put the
+        ;; prior endpoint back or every later suite sees this test's host.
+        prior-config    (select-keys (conn/get-config) [:host :port :collection-name])]
     (client/set-transport! (transport/->transport))
     (active/set-embedding-provider! (fixtures/->MockEmbedder 8))
     (conn/reset-collection-cache!)
@@ -29,6 +32,7 @@
       (isolation/with-restored-store-registry
         (fn [] (fixtures/with-config {:embedder {:no-embed-types #{} :routes {}}} (f))))
       (finally
+        (conn/configure! prior-config)
         (conn/reset-collection-cache!)
         (client/set-transport! prior-transport)
         (active/set-embedding-provider! prior-provider)))))
