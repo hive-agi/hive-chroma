@@ -1,0 +1,6 @@
+{:project-id "hive-chroma"
+ :parent "hive"
+ :description "Chroma vector-database backend for hive-mcp, mounted as an IAddon: IMemoryStore + IVectorCollectionStore over clojure-chroma-client, extracted from hive-mcp's chroma.* (history preserved)."
+ :language :clojure
+ :tags ["addon" "chroma" "memory-store" "vector-db"]
+ :carto {:source-roots ["resources" "src" "test"]}}

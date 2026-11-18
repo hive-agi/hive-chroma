@@ -1,15 +1,15 @@
-(ns hive-mcp.chroma.search
+(ns hive-chroma.search
   "Semantic search operations for Chroma memory entries."
-  (:require [hive-mcp.chroma.client :as chroma]
-            [hive-mcp.chroma.connection :as conn]
-            [hive-mcp.embeddings.active :as emb]
-            [hive-mcp.chroma.gate :as gate]
-            [hive-mcp.embeddings.service :as embedding-service]
+  (:require [hive-chroma.client :as chroma]
+            [hive-chroma.connection :as conn]
+            [hive-chroma.host :as emb]
+            [hive-chroma.gate :as gate]
+            [hive-chroma.host :as embedding-service]
             [hive-dsl.result :as r]
             [taoensso.timbre :as log]
-            [hive-mcp.memory.ingest-search :as ingest-search]
-            [hive-mcp.embeddings.role :as role]
-            [hive-mcp.config.core :as config]
+            [hive-chroma.host :as ingest-search]
+            [hive-chroma.host :as role]
+            [hive-chroma.host :as config]
             [malli.core :as m]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>

@@ -1,0 +1,16 @@
+{:addon/id           "hive.chroma"
+ :addon/kind         :library
+ :addon/type         :native
+ :addon/version      "0.1.0"
+ :addon/init-ns      "hive-chroma.addon"
+ :addon/init-fn      "create-addon"
+ ;; Connection: :host / :port / :collection-name, else CHROMA_HOST /
+ ;; CHROMA_PORT, else localhost:8000 / hive-mcp-memory. The store registers
+ ;; under :registry-key (default :chroma) and takes the active :default slot
+ ;; only when no other backend holds it, or with :active? true.
+ :addon/config       {}
+ :addon/capabilities #{:memory-store :vector-search :health-reporting}
+ :addon/dependencies #{}
+ :addon/description  "Chroma vector database backend: IMemoryStore + IVectorCollectionStore over clojure-chroma-client."
+ :addon/maturity     :stable
+ :addon/trust-class  :foss}

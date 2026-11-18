@@ -1,0 +1,9 @@
+{:lib      io.github.hive-agi/hive-chroma
+ :minor    1
+ :license  {:name "AGPL-3.0-or-later" :url "https://www.gnu.org/licenses/agpl-3.0.txt"}
+ :scm-url  "https://github.com/hive-agi/hive-chroma"
+ :src-dirs ["src" "resources"]
+ ;; :git/tag coords are skipped by b/write-pom; clojure-chroma-client is
+ ;; resolved lazily (hive-chroma.client), so a consumer by :mvn/version must
+ ;; add it itself, as hive-mcp's deployment does via local.deps.edn.
+ :publish  :clojars}

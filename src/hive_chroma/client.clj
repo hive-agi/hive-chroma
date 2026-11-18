@@ -1,4 +1,4 @@
-(ns hive-mcp.chroma.client
+(ns hive-chroma.client
   "Vendor-decoupled Chroma transport seam. The Chroma backend namespaces
    depend on this, not on clojure-chroma-client directly. Public fns mirror
    the clojure-chroma-client.api surface used by hive-mcp (same names + kwarg

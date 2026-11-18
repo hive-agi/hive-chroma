@@ -1,4 +1,4 @@
-(ns hive-mcp.memory.store.chroma-test
+(ns hive-chroma.store-test
   "Tests for ChromaMemoryStore protocol implementation.
 
    Tests verify:
@@ -8,16 +8,16 @@
    4. Method delegation to chroma.clj functions
    5. Store status and health reporting"
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
-            [hive-mcp.memory.store.chroma :as chroma-store]
+            [hive-chroma.store :as chroma-store]
             [hive-mcp.protocols.memory :as mem-proto]
             [hive-test.golden :refer [deftest-golden]]
             [hive-schemas.test :refer [deftrifecta-from-schema]]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.connection :as chroma-conn]
-            [hive-mcp.config.test-support :as cfg]
+            [hive-chroma.client :as client]
+            [hive-chroma.connection :as chroma-conn]
+            [hive-chroma.test.fixtures :as cfg]
             [hive-mcp.embeddings.active :as active]
-            [hive-mcp.test-fixtures :as fixtures]
-            [hive-mcp.test.stub.chroma-transport :as transport]))
+            [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.stub.transport :as transport]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -71,7 +71,7 @@
 (deftest test-create-store-defaults
   (testing "create-store with no args uses defaults"
     (let [store (chroma-store/create-store)]
-      (is (instance? hive_mcp.memory.store.chroma.ChromaMemoryStore store))
+      (is (instance? hive_chroma.store.ChromaMemoryStore store))
       (is (= "localhost" (:host @(:config-atom store))))
       (is (= 8000 (:port @(:config-atom store))))
       (is (= "hive-mcp-memory" (:collection-name @(:config-atom store)))))))
@@ -81,7 +81,7 @@
     (let [store (chroma-store/create-store {:host "chroma.example.com"
                                             :port 9000
                                             :collection-name "custom-collection"})]
-      (is (instance? hive_mcp.memory.store.chroma.ChromaMemoryStore store))
+      (is (instance? hive_chroma.store.ChromaMemoryStore store))
       (is (= "chroma.example.com" (:host @(:config-atom store))))
       (is (= 9000 (:port @(:config-atom store))))
       (is (= "custom-collection" (:collection-name @(:config-atom store)))))))
@@ -184,7 +184,7 @@
   {:in [:cat FieldName]
    :out :keyword
    :rel (fn [[f] out] (= (name out) (.replace ^String (name f) "_" "-")))
-   :golden-path "test/golden/hive-mcp/memory/store-chroma-field-key.edn"
+   :golden-path "test/golden/hive-chroma/store-chroma-field-key.edn"
    :num-tests 100})
 
 (def ^:private Entry
@@ -221,7 +221,7 @@
            (if prior-p (active/set-embedding-provider! prior-p) (active/reset-embedding-provider!))))))
 
 (deftest-golden crud-over-injected-ports-golden
-  "test/golden/hive-mcp/memory/store-chroma-crud.edn"
+  "test/golden/hive-chroma/store-chroma-crud.edn"
   (with-chroma-ports
     (fn []
       (let [s      (chroma-store/create-store)

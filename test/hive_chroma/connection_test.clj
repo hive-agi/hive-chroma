@@ -1,15 +1,15 @@
-(ns hive-mcp.chroma.connection-test
-  "hive-mcp.chroma.connection over INJECTED ports: the in-memory Chroma
+(ns hive-chroma.connection-test
+  "hive-chroma.connection over INJECTED ports: the in-memory Chroma
    transport and a mock embedding provider. Goldens pin config merging,
    status with and without a provider, and the collection caches."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.connection :as conn]
+            [hive-chroma.client :as client]
+            [hive-chroma.connection :as conn]
             [hive-mcp.embeddings.active :as active]
             [hive-mcp.embeddings.registry :as registry]
             [hive-mcp.embeddings.service :as service]
-            [hive-mcp.test-fixtures :as fixtures]
-            [hive-mcp.test.stub.chroma-transport :as transport]
+            [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.stub.transport :as transport]
             [hive-test.golden :refer [deftest-golden]]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -50,7 +50,7 @@
 (use-fixtures :each own-ports)
 
 (deftest-golden status-and-caches-golden
-  "test/golden/hive-mcp/chroma/connection-status-caches.edn"
+  "test/golden/hive-chroma/connection-status-caches.edn"
   (let [_          (active/reset-embedding-provider!)
         unprovided {:status (conn/status) :available? (conn/chroma-available?)}
         _          (active/set-embedding-provider! (fixtures/->MockEmbedder 8))
