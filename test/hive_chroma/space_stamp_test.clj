@@ -14,12 +14,13 @@
             [hive-chroma.gate :as gate]
             [hive-chroma.search :as search]
             [hive-chroma.test.fixtures :as cfg]
+            #_{:clj-kondo/ignore [:duplicate-require]}
+            [hive-chroma.test.fixtures :as fixtures]
             [hive-mcp.embeddings.active :as active]
             [hive-mcp.embeddings.ollama :as ollama]
             [hive-mcp.embeddings.registry :as registry]
             [hive-mcp.embeddings.service :as service]
             [hive-mcp.embeddings.space :as space]
-            [hive-chroma.test.fixtures :as fixtures]
             [hive-chroma.stub.transport :as transport]
             [malli.instrument :as mi]))
 
@@ -38,9 +39,10 @@
 (def ^:private digest (atom "sha256:aaaa"))
 
 (def ^:private contracted
-  #{#'space/space->metadata #'space/metadata->space #'space/admit
+  #{#'space/space->metadata #'space/metadata->space #'space/admit #'space/audit
     #'conn/get-or-create-named-collection #'service/space-for-resolved
     #'conn/get-or-create-collection #'service/default-space
+    #'conn/collection-names #'conn/collection-space-audit
     #'active/set-embedding-provider! #'active/get-embedding-provider-spec
     #'ollama/digest-in-tags})
 
@@ -294,9 +296,9 @@
           "default-space should be nil when digest cannot be resolved"))
     (testing "and the collection stays unstamped (no metadata written)"
       (conn/reset-collection-cache!)
-      (let [coll (conn/get-or-create-collection)]
-        (is (nil? (space/metadata->space (stored-metadata (default-name))))
-            "no stamp metadata should be present in the collection")))))
+      (conn/get-or-create-collection)
+      (is (nil? (space/metadata->space (stored-metadata (default-name))))
+          "no stamp metadata should be present in the collection"))))
 
 (deftest read-path-does-not-stamp
   (testing "real zero-arity read paths do not stamp an existing collection"
@@ -325,3 +327,62 @@
     (is (= :openai (:provider s)))
     (is (= "text-embedding-3-small" (:model s)))
     (is (nil? (:digest s)))))
+
+;; =============================================================================
+;; Legacy listing: audit every collection without dying on the first mismatch
+;; =============================================================================
+
+(deftest audit-reports-every-verdict-as-data
+  (let [s (space-of {})]
+    (testing "stamped with the expected space"
+      (let [row (space/audit coll-name s (space/space->metadata s))]
+        (is (= :stamped (:verdict row)))
+        (is (= (space/space-id s) (:space-id row)))
+        (is (= (space/space-id s) (:expected-id row)))
+        (is (nil? (:remedy row)) "nothing to remedy")))
+    (testing "no stamp at all is legacy, and its space id is the unknown one"
+      (let [row (space/audit coll-name s {:dimension dim})]
+        (is (= :legacy (:verdict row)))
+        (is (= space/unknown-space-id (:space-id row)))
+        (is (= #{:isolate :re-embed} (:remedy row)))))
+    (testing "a recorded space that differs is diverged, never thrown"
+      (let [other (space-of {:digest "sha256:bbbb"})
+            row   (space/audit coll-name s (space/space->metadata other))]
+        (is (= :diverged (:verdict row)))
+        (is (= (space/space-id other) (:space-id row)))
+        (is (= (space/space-id s) (:expected-id row)))
+        (is (= [:digest] (:differing-keys row)))
+        (is (= #{:isolate :re-embed} (:remedy row)))))
+    (testing "with no expected space a recorded collection is still stamped"
+      (is (= :stamped (:verdict (space/audit coll-name (space/space->metadata s)))))
+      (is (nil? (:expected-id (space/audit coll-name (space/space->metadata s))))))))
+
+(deftest audit-lists-every-collection-that-exists
+  (name-global-provider!)
+  (gate/deref-write (client/create-collection "hive-mcp-memory-legacy" :metadata {:dimension dim}))
+  (conn/reset-collection-cache!)
+  (conn/get-or-create-named-collection coll-name dim (space-of {:digest "sha256:bbbb"}))
+  (let [rows    (conn/collection-space-audit {:names ["hive-mcp-memory-legacy"]
+                                              :space (space-of {})})
+        by-name (into {} (map (juxt :collection identity)) rows)]
+    (testing "every existing collection is visited, and none is created"
+      (is (= #{"hive-mcp-memory-legacy" coll-name} (set (keys by-name))))
+      (is (= #{"hive-mcp-memory-legacy" coll-name} (set (keys @(:state *transport*))))
+          "the audit asks only for names that exist"))
+    (testing "an unstamped collection is legacy with a remedy, not a throw"
+      (is (= :legacy (get-in by-name ["hive-mcp-memory-legacy" :verdict])))
+      (is (= space/unknown-space-id (get-in by-name ["hive-mcp-memory-legacy" :space-id])))
+      (is (= #{:isolate :re-embed} (get-in by-name ["hive-mcp-memory-legacy" :remedy]))))
+    (testing "a collection stamped with another space is divergent, not an exception"
+      (is (= :diverged (get-in by-name [coll-name :verdict])))
+      (is (= [:digest] (get-in by-name [coll-name :differing-keys])))
+      (is (= (space/space-id (space-of {})) (get-in by-name [coll-name :expected-id]))))))
+
+(deftest audit-without-an-expected-space-never-names-one
+  (name-global-provider!)
+  (conn/get-or-create-collection (space-of {}))
+  (let [rows (conn/collection-space-audit)]
+    (is (seq rows) "the default collection exists and is listed")
+    (is (every? #(not (contains? % :expected-id)) rows)
+        "no expected space was given, so no row claims one")
+    (is (every? #(contains? #{:stamped :legacy} (:verdict %)) rows))))
