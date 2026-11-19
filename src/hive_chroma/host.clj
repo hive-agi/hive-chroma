@@ -104,6 +104,9 @@
 (host/defsoft type->collection-names
   'hive-mcp.embeddings.service/type->collection-names :absent (constantly nil))
 
+(host/defsoft all-collection-names
+  'hive-mcp.embeddings.service/all-collection-names :absent (constantly []))
+
 ;; =============================================================================
 ;; Embedding spaces (hive-mcp.embeddings.space)
 ;; =============================================================================
@@ -115,9 +118,16 @@
   'hive-mcp.embeddings.space/admit
   :absent (fn [_coll-name _space _metadata] {:verdict :unchecked :space-id nil}))
 
-;; Schema stand-in: the host owns the EmbeddingSpace schema; here a space is
-;; any map, or nil when the provider cannot name one.
+(host/defsoft audit
+  'hive-mcp.embeddings.space/audit
+  :absent (fn [coll-name & _] {:collection coll-name :verdict :unchecked
+                               :space-id nil :remedy nil}))
+
+;; Schema stand-ins: the host owns the EmbeddingSpace and AuditRow schemas;
+;; here a space is any map (or nil when the provider cannot name one), and an
+;; audit row is any map.
 (def EmbeddingSpace [:maybe :map])
+(def AuditRow :map)
 
 ;; =============================================================================
 ;; Query shaping, config, federated ingest search
