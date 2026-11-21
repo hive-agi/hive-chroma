@@ -56,24 +56,26 @@
   (host/set-digest-resolver! (fn [_spec] @digest)))
 
 (defn- stub-ports [f]
-  (let [prior-t      (client/transport)
-        prior-p      (host/get-embedding-provider)
-        prior-spec   (host/get-embedding-provider-spec)
-        prior-caches (connection-caches)
-        t            (transport/->transport)]
+  (let [prior-t       (client/transport)
+        prior-p       (host/get-embedding-provider)
+        prior-spec    (host/get-embedding-provider-spec)
+        prior-factory (host/get-provider-factory)
+        prior-caches  (connection-caches)
+        t             (transport/->transport)]
     (client/set-transport! t)
     (host/set-embedding-provider! (fixtures/->MockEmbedder dim))
+    (host/set-provider-factory! (fn [spec] (fixtures/->MockEmbedder (:dimension spec))))
     (conn/reset-collection-cache!)
     (reset! digest "sha256:aaaa")
     (digest-port!)
     (mi/instrument! {:filters [(mi/-filter-var contracted)]})
     (try
-      (binding [host/*provider-factory* (fn [spec] (fixtures/->MockEmbedder (:dimension spec)))
-                *transport* t]
+      (binding [*transport* t]
         (fixtures/with-config embedder-config (f)))
       (finally
         (mi/unstrument! {:filters [(mi/-filter-var contracted)]})
         (host/set-digest-resolver! (fn [_spec] nil))
+        (host/set-provider-factory! prior-factory)
         (restore-connection-caches! prior-caches)
         (client/set-transport! prior-t)
         (if prior-p
