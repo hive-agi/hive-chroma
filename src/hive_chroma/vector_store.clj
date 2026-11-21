@@ -178,6 +178,25 @@
   [:fn {:gen/schema client/Transport :gen/fmap ->ChromaVectorStore}
    #(instance? ChromaVectorStore %)])
 
+(def ^:private Records [:sequential :map])
+(def ^:private ReadOpts
+  [:maybe [:map [:ids {:optional true} [:maybe [:sequential :any]]]
+           [:where {:optional true} [:maybe :map]]
+           [:limit {:optional true} [:maybe pos-int?]]
+           [:n-results {:optional true} [:maybe pos-int?]]
+           [:include {:optional true} :any]]])
+
+(m/=> await! [:=> [:cat :any pos-int?] :any])
+(m/=> -configure* [:=> [:cat VectorStore :map] VectorStore])
+(m/=> -get-collection* [:=> [:cat VectorStore :string] client/Coll])
+(m/=> -create-collection* [:=> [:cat VectorStore :string [:maybe :map]] client/Coll])
+(m/=> -delete-collection* [:=> [:cat VectorStore client/Coll] :nil])
+(m/=> -add* [:=> [:cat VectorStore client/Coll Records [:maybe :map]] :nil])
+(m/=> -get* [:=> [:cat VectorStore client/Coll ReadOpts] [:vector :map]])
+(m/=> -query* [:=> [:cat VectorStore client/Coll [:sequential number?] ReadOpts] [:vector :map]])
+(m/=> -delete* [:=> [:cat VectorStore client/Coll ReadOpts] :nil])
+(m/=> -update* [:=> [:cat VectorStore client/Coll Records] :nil])
+
 (m/=> chroma-vector-store [:function
                            [:=> [:cat] VectorStore]
                            [:=> [:cat client/Transport] VectorStore]

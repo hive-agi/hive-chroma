@@ -33,6 +33,8 @@
 
 (defn- kw-args [opts] (mapcat identity opts))
 
+(m/=> kw-args [:=> [:cat [:maybe :map]] [:sequential :any]])
+
 (defrecord SoftVendorTransport []
   IChromaTransport
   (-configure [_ opts]

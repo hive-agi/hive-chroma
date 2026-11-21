@@ -8,7 +8,7 @@
        model (`set-embedding-provider!`),
      - per-type routing over an EDN `:embedder` config ({:default k :routes
        {type k} :providers {k spec}}), provider instances built by
-       `*provider-factory*`,
+       the injected provider port (`set-provider-factory!`),
      - the embedding space of a route or of the global provider, with the
        model digest answered by a swappable resolver,
      - config lookup over `*config*`,
@@ -29,9 +29,21 @@
   "The effective host config (see hive-chroma.test.fixtures/with-config)."
   {})
 
-(def ^:dynamic *provider-factory*
-  "(fn [provider-spec]) -> EmbeddingProvider for a routed provider."
-  (fn [_spec] nil))
+(defonce ^:private provider-factory
+  (atom (fn [_spec] nil)))
+
+(defn set-provider-factory!
+  "Install the provider port: (fn [provider-spec]) -> EmbeddingProvider for a
+   routed provider. Returns F. A test installs it in its fixture and restores
+   the prior one afterwards; nothing is rebound."
+  [f]
+  (reset! provider-factory f)
+  f)
+
+(defn get-provider-factory
+  "The installed provider port."
+  []
+  @provider-factory)
 
 (def doc-serializer-rev
   "Revision of the embedded document text."
@@ -81,7 +93,7 @@
 
 (defn- build-resolved [provider-key]
   (if-let [spec (get-in (embedder-config) [:providers provider-key])]
-    {:provider        (*provider-factory* spec)
+    {:provider        (@provider-factory spec)
      :dimension       (:dimension spec)
      :max-tokens      (:max-tokens spec 8192)
      :collection-name (collection-name-for-dimension (:dimension spec))

@@ -13,7 +13,7 @@
             [hive-chroma.search :as csearch]
             [hive-chroma.maintenance :as cmaint]
             [hive-dsl.result :as result]
-            [taoensso.timbre :as log]
+            [hive-spi.log.ports :as log]
             [clojure.string :as str]
             [hive-spi.memory.ports :as ports]
             [hive-chroma.helpers :as h]))
@@ -177,6 +177,25 @@
                                {:beta   (inc dep-beta)
                                 :source :transitive
                                 :depth  (inc depth)}))))
+
+(def ^:private StoreResult
+  [:or [:map [:ok :any]] [:map [:error :keyword] [:message {:optional true} :any]]])
+
+(def ^:private Health
+  [:map [:healthy? :boolean] [:latency-ms :int] [:backend :string]
+   [:entry-count [:maybe :int]] [:errors [:vector :string]] [:checked-at :string]])
+
+(m/=> now-iso [:=> [:cat] :string])
+(m/=> staleness-probability [:=> [:cat :map] [:double {:min 0.0 :max 1.0}]])
+(m/=> feedback->field [:=> [:cat [:enum :helpful :unhelpful]] [:enum :helpful-count :unhelpful-count]])
+(m/=> helpfulness-map [:=> [:cat :map]
+                       [:map [:helpful-count :int] [:unhelpful-count :int] [:total :int] [:ratio :double]]])
+(m/=> apply-order-by [:=> [:cat [:sequential :map] [:maybe [:tuple :keyword [:enum :asc :desc]]]]
+                      [:sequential :map]])
+(m/=> build-health-map [:=> [:cat StoreResult :int] Health])
+(m/=> probe-chroma [:=> [:cat] StoreResult])
+(m/=> safe-entry-count [:=> [:cat] [:maybe [:int {:min 0}]]])
+(m/=> propagate-to-dep! [:=> [:cat :any :int] StoreResult])
 
 ;; =========================================================================
 ;; Protocol Implementation
@@ -378,9 +397,7 @@
 ;;                     true, otherwise false. No polling because there's
 ;;                     no async heal loop to wait on.
 
-(require '[hive-spi.memory.ports :as liveness])
-
-(extend-protocol liveness/IMemoryStoreLiveness
+(extend-protocol ports/IMemoryStoreLiveness
   ChromaMemoryStore
   (-probe! [_this]
     (boolean (chroma/chroma-available?)))
@@ -417,6 +434,13 @@
                                       :port 8000
                                       :collection-name "hive-mcp-memory"}
                                      opts)))))
+
+(defn chroma-store?
+  "True when X is a ChromaMemoryStore."
+  [x]
+  (instance? ChromaMemoryStore x))
+
+(m/=> chroma-store? [:=> [:cat :any] :boolean])
 
 (m/=> create-store [:function [:=> [:cat] [:fn {:gen/elements [(->ChromaMemoryStore (atom {}))]} #(satisfies? proto/IMemoryStore %)]] [:=> [:cat :map] [:fn {:gen/elements [(->ChromaMemoryStore (atom {}))]} #(satisfies? proto/IMemoryStore %)]]])
 

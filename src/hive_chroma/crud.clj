@@ -6,7 +6,7 @@
             [hive-chroma.gate :as gate]
             [hive-chroma.helpers :as h]
             [hive-chroma.host :as embedding-service]
-            [taoensso.timbre :as log] [hive-dsl.result :refer [rescue]]
+            [hive-spi.log.ports :as log] [hive-dsl.result :as r :refer [rescue]]
             [malli.core :as m]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -106,93 +106,154 @@
    [:staleness-source {:optional true} some?]
    [:staleness-depth {:optional true} some?]])
 
+;; -----------------------------------------------------------------------------
+;; index-memory-entry! stages: collect (route) -> promote (metadata, vector)
+;; -> boundary (write). Each stage is small enough to test on its own.
+;; -----------------------------------------------------------------------------
+
+(def ^:private tag-fields
+  "Entry fields stored as a comma-joined string."
+  [:tags :kg-outgoing :kg-incoming :knowledge-gaps])
+
+(def ^:private scalar-fields
+  "Entry fields stored as they are."
+  [:type :content-hash :duration :expires :access-count :helpful-count
+   :unhelpful-count :project-id :abstraction-level :grounded-at :grounded-from
+   :source-hash :source-file :staleness-alpha :staleness-beta :staleness-depth])
+
+(def Metadata
+  "Chroma metadata for one stored entry: scalar values by field keyword."
+  [:map-of :keyword :any])
+
+(defn entry->metadata
+  "Promote: the Chroma metadata for STORED (an entry already stripped of its
+   transient keys), with NOW as the created/updated fallback. Nil fields are
+   dropped so `h/metadata-defaults` fills them. Pure."
+  [stored now]
+  (let [provided (merge (select-keys stored scalar-fields)
+                        (into {} (map (fn [k] [k (h/join-tags (get stored k))])) tag-fields)
+                        {:content          (h/serialize-content (:content stored))
+                         :created          (or (:created stored) now)
+                         :updated          (or (:updated stored) now)
+                         :staleness-source (some-> (:staleness-source stored) name)})]
+    (merge h/metadata-defaults (into {} (remove (comp nil? val)) provided))))
+
+(defn- resolve-route
+  "Collect: the size-aware route for TYPE and EMBED-TEXT, or nil when the host
+   routes nothing. Oversized content escalates to a bigger-context provider and
+   its collection; a routed embed is checked against the provider's size limit
+   (no-embed types store a placeholder vector, so they are not checked)."
+  [type embed-text no-embed?]
+  (let [resolved (rescue nil (embedding-service/resolve-provider-for-type+size type embed-text))]
+    (when (and resolved (not no-embed?))
+      (embedding-service/validate-content-size! embed-text resolved))
+    resolved))
+
+(defn- route-collection
+  "Boundary: the space-guarded collection RESOLVED writes to
+   (see `conn/collection-for-route`)."
+  [resolved]
+  (conn/collection-for-route resolved))
+
+(defn- attempt-embed
+  "Embed TEXT with PROVIDER as a Result: {:ok vector} or
+   {:error :embed/failed :cause throwable}. The cause is kept so the caller can
+   rethrow it unchanged."
+  [provider text]
+  (try
+    (r/ok (emb/embed-text provider text))
+    (catch Throwable e
+      (r/err :embed/failed {:cause e}))))
+
+(defn- unwrap-embed!
+  "The vector of RESULT, or log MSG-PARTS at :error and rethrow its cause."
+  [result msg-parts]
+  (if (r/ok? result)
+    (:ok result)
+    (do (apply log/error (concat msg-parts ["—" (ex-message (:cause result))]))
+        (throw (:cause result)))))
+
+(defn- failover-embed!
+  "Embed TEXT through ALT, the same-dimension sibling of RESOLVED, after the
+   primary failed. The sibling embeds into its own (stamped) collection, so
+   that collection is guarded first. ROUTES is {:entry-id :resolved :alt}."
+  [{:keys [entry-id resolved alt]} text cause]
+  (log/warn "Embed via" (:provider-key resolved) "failed for entry" entry-id
+            "— failing over to" (:provider-key alt) "(" (ex-message cause) ")")
+  (route-collection alt)
+  (unwrap-embed! (attempt-embed (:provider alt) text)
+                 ["Embed failover also failed for entry" entry-id "providers"
+                  (:provider-key resolved) "/" (:provider-key alt)]))
+
+(defn embed-with-failover
+  "Stage: the vector for TEXT, embedded by RESOLVED's provider (the global one
+   with no route). When it fails, fail over once to a same-dimension sibling
+   (`sibling-failover`, e.g. venice<->openrouter qwen3) so a write is never
+   stored unvectorized. Throws the last provider's failure when no provider
+   could embed: a write must not silently skip its vector."
+  [entry-id resolved text]
+  (let [provider (if resolved (:provider resolved) (emb/get-embedding-provider))
+        primary  (attempt-embed provider text)
+        alt      (when (r/err? primary) (some-> resolved embedding-service/sibling-failover))]
+    (if (and (r/err? primary) alt)
+      (failover-embed! {:entry-id entry-id :resolved resolved :alt alt} text (:cause primary))
+      (unwrap-embed! primary ["Embed FAILED (no failover sibling) for entry" entry-id
+                              "via" (:provider-key resolved)]))))
+
+(defn- entry-embedding
+  "Promote: the vector stored for an entry. A no-embed type (structurally
+   addressed blob) skips the provider and stores a zero placeholder."
+  [entry-id no-embed? resolved text]
+  (if no-embed?
+    (vec (repeat (or (:dimension resolved) 768) 0.0))
+    (embed-with-failover entry-id resolved text)))
+
 (defn index-memory-entry!
   "Index a memory entry in Chroma, returns entry ID.
 
    A transient string :embed-text is embedded in place of the document built
    from :content (see `embed-input`) and is never persisted, under any
-   spelling or depth (see `strip-transient`)."
+   spelling or depth (see `strip-transient`).
+
+   Collect (route, collection) -> promote (vector, metadata) -> boundary
+   (upsert). The route drives collection, provider and embedding together,
+   so the dimension stays coherent."
   [entry]
   (emb/require-embedding!)
-  (let [{:keys [id content type tags created updated duration expires
-                content-hash access-count helpful-count unhelpful-count project-id
-                kg-outgoing kg-incoming abstraction-level
-                grounded-at grounded-from knowledge-gaps source-hash source-file
-                staleness-alpha staleness-beta staleness-source staleness-depth]
-         :as stored} (strip-transient entry)
-        entry-id (or id (h/generate-id))
-        now (h/iso-timestamp)
-        doc-text (h/memory-to-document stored)
-        embed-text (embed-input entry doc-text)
-        ;; Size-aware resolution: oversized content auto-escalates to a
-        ;; bigger-context provider (and its collection) — same resolution
-        ;; drives collection + provider + embedding, so dimension stays
-        ;; coherent. No-embed types (structurally-addressed blobs) skip the
-        ;; provider call and store a zero placeholder vector.
-        no-embed? (embedding-service/no-embed-type? type)
-        resolved (rescue nil (embedding-service/resolve-provider-for-type+size type embed-text))
-        _ (when (and resolved (not no-embed?))
-            (embedding-service/validate-content-size! embed-text resolved))
-        coll (if resolved
-               ;; Space-guarded: a collection stamped with another embedding
-               ;; space refuses the write (:embedding-space-mismatch).
-               (conn/get-or-create-named-collection
-                 (:collection-name resolved) (:dimension resolved)
-                 (embedding-service/space-for-resolved resolved {:metric conn/metric}))
-               (conn/get-or-create-collection
-                 (embedding-service/default-space {:metric conn/metric})))
-        provider (if resolved (:provider resolved) (emb/get-embedding-provider))
-        embed-1 (fn [p] (emb/embed-text p embed-text))
-        embedding (if no-embed?
-                    (vec (repeat (or (:dimension resolved) 768) 0.0))
-                    ;; Embed via the resolved provider; on failure (e.g. Venice
-                    ;; slow/unreachable) fail over once to a same-dimension
-                    ;; sibling (venice<->openrouter qwen3, both 4096-d) so the
-                    ;; write is never silently stored unvectorized.
-                    (try
-                      (embed-1 provider)
-                      (catch Throwable e1
-                        (if-let [alt (and resolved (embedding-service/sibling-failover resolved))]
-                          (do (log/warn "Embed via" (:provider-key resolved)
-                                        "failed for entry" entry-id "— failing over to"
-                                        (:provider-key alt) "(" (.getMessage e1) ")")
-                              ;; The sibling must embed into the collection's own
-                              ;; space too: a stamped collection refuses it.
-                              (conn/get-or-create-named-collection
-                                (:collection-name alt) (:dimension alt)
-                                (embedding-service/space-for-resolved alt {:metric conn/metric}))
-                              (try (embed-1 (:provider alt))
-                                   (catch Throwable e2
-                                     (log/error "Embed failover also failed for entry"
-                                                entry-id "providers" (:provider-key resolved)
-                                                "/" (:provider-key alt) "—" (.getMessage e2))
-                                     (throw e2))))
-                          (do (log/error "Embed FAILED (no failover sibling) for entry"
-                                         entry-id "via" (and resolved (:provider-key resolved))
-                                         "—" (.getMessage e1))
-                              (throw e1))))))
-        provided {:type type :tags (h/join-tags tags) :content (h/serialize-content content)
-                  :content-hash content-hash :created (or created now) :updated (or updated now)
-                  :duration duration :expires expires :access-count access-count
-                  :helpful-count helpful-count :unhelpful-count unhelpful-count
-                  :project-id project-id
-                  :kg-outgoing (h/join-tags kg-outgoing)
-                  :kg-incoming (h/join-tags kg-incoming)
-                  :abstraction-level abstraction-level
-                  :grounded-at grounded-at
-                  :grounded-from grounded-from
-                  :knowledge-gaps (h/join-tags knowledge-gaps)
-                  :source-hash source-hash
-                  :source-file source-file
-                  :staleness-alpha staleness-alpha
-                  :staleness-beta staleness-beta
-                  :staleness-source (when staleness-source (name staleness-source))
-                  :staleness-depth staleness-depth}
-        meta (merge h/metadata-defaults (into {} (remove (comp nil? val) provided)))]
-    (gate/deref-write (chroma/add coll [{:id entry-id :embedding embedding :document doc-text :metadata meta}]
-                                      :upsert? true))
+  (let [stored    (strip-transient entry)
+        entry-id  (or (:id stored) (h/generate-id))
+        doc-text  (h/memory-to-document stored)
+        text      (embed-input entry doc-text)
+        no-embed? (embedding-service/no-embed-type? (:type stored))
+        resolved  (resolve-route (:type stored) text no-embed?)
+        coll      (route-collection resolved)
+        record    {:id        entry-id
+                   :embedding (entry-embedding entry-id no-embed? resolved text)
+                   :document  doc-text
+                   :metadata  (entry->metadata stored (h/iso-timestamp))}]
+    (gate/deref-write (chroma/add coll [record] :upsert? true))
     (log/debug "Indexed memory entry:" entry-id)
     entry-id))
+
+(def ^:private Resolved
+  "A host route (see `conn/Route`)."
+  conn/Route)
+
+(def ^:private EmbedResult
+  "An embed attempt: {:ok vector} or {:error :embed/failed :cause throwable}."
+  [:or [:map [:ok [:sequential number?]]]
+   [:map [:error [:= :embed/failed]] [:cause [:fn #(instance? Throwable %)]]]])
+
+(m/=> entry->metadata [:=> [:cat EntryIn :string] Metadata])
+(m/=> resolve-route [:=> [:cat [:maybe [:or :string :keyword]] [:maybe :string] :boolean] Resolved])
+(m/=> route-collection [:=> [:cat Resolved] chroma/Coll])
+(m/=> attempt-embed [:=> [:cat :any [:maybe :string]] EmbedResult])
+(m/=> unwrap-embed! [:=> [:cat EmbedResult [:sequential :any]] [:sequential number?]])
+(m/=> failover-embed! [:=> [:cat [:map [:entry-id :string] [:resolved Resolved] [:alt Resolved]]
+                                [:maybe :string] :any]
+                       [:sequential number?]])
+(m/=> embed-with-failover [:=> [:cat :string Resolved [:maybe :string]] [:sequential number?]])
+(m/=> entry-embedding [:=> [:cat :string :boolean Resolved [:maybe :string]] [:vector number?]])
 
 (m/=> index-memory-entry! [:=> [:cat EntryIn] EntryId])
 
@@ -254,57 +315,88 @@
 
 (m/=> get-entry-by-id [:=> [:cat :any] [:maybe Entry]])
 
+(defn- routed-collection
+  "The collection named CN as TYPE's route reads it: the route's own named
+   collection when it names CN, else the default collection."
+  [type cn]
+  (let [resolved (rescue nil (embedding-service/resolve-provider-for-type (or type "note")))]
+    (if (and resolved (= cn (:collection-name resolved)))
+      (conn/get-or-create-named-collection cn (:dimension resolved))
+      (conn/get-or-create-collection))))
+
 (defn read-collections
   "Collections a read of TYPE must visit. With no embedder provider configured
    the type routing names no collection at all, yet writes still land in the
    default one, so an empty routing answer means the default collection, never
-   nothing."
+   nothing. A routing failure is logged and also falls back to the default."
   [type]
-  (let [colls (try (let [coll-names (embedding-service/type->collection-names type)]
-                     (mapv (fn [cn]
-                             (let [resolved (rescue nil (embedding-service/resolve-provider-for-type
-                                                         (or type "note")))]
-                               (if (and resolved (= cn (:collection-name resolved)))
-                                 (conn/get-or-create-named-collection cn (:dimension resolved))
-                                 (conn/get-or-create-collection))))
-                           coll-names))
-                   (catch Exception _ []))]
-    (if (seq colls) (vec (distinct colls)) [(conn/get-or-create-collection)])))
+  (let [result (r/try-effect* :read/routing-failed
+                 (mapv #(routed-collection type %) (embedding-service/type->collection-names type)))]
+    (when (r/err? result)
+      (log/warn "Collection routing failed for type" type "- reading the default collection:"
+                (:message result)))
+    (if (seq (:ok result))
+      (vec (distinct (:ok result)))
+      [(conn/get-or-create-collection)])))
 
 (m/=> read-collections [:=> [:cat [:maybe [:or :string :keyword]]] [:vector {:min 1} chroma/Coll]])
+
+(def QueryFilters
+  "The metadata filters a query-entries read applies."
+  [:map
+   [:type {:optional true} [:maybe [:or :string :keyword]]]
+   [:project-id {:optional true} [:maybe :string]]
+   [:project-ids {:optional true} [:maybe [:sequential :any]]]
+   [:tags {:optional true} [:maybe [:sequential :any]]]
+   [:exclude-tags {:optional true} [:maybe [:sequential :any]]]])
+
+(def Where
+  "A Chroma metadata where clause, nil for no filter."
+  [:maybe :map])
+
+(defn query-where
+  "The Chroma where clause for FILTERS: field equality for type and project,
+   $contains / $not_contains per included / excluded tag, joined by $and when
+   more than one field is constrained by tags. Pure."
+  [{:keys [type project-id project-ids tags exclude-tags]}]
+  (let [base  (cond-> {}
+                type        (assoc :type type)
+                project-ids (assoc :project-id {:$in (vec project-ids)})
+                (and project-id (not project-ids)) (assoc :project-id project-id))
+        extra (concat (map (fn [tag] {:tags {:$contains tag}}) tags)
+                      (map (fn [tag] {:tags {:$not_contains tag}}) exclude-tags))]
+    (cond
+      (seq extra) {:$and (into (mapv (fn [[k v]] {k v}) base) extra)}
+      (seq base)  base
+      :else       nil)))
+
+(defn- read-rows
+  "Rows of COLL matching the vendor GET-OPTS, as a Result. A collection that
+   cannot be read is logged and contributes no rows, so one bad collection
+   does not fail a fan-out read; the failure is never silent."
+  [coll get-opts]
+  (let [result (r/try-effect* :read/failed
+                 (gate/deref-read (apply chroma/get coll (mapcat identity get-opts))))]
+    (when (r/err? result)
+      (log/warn "Chroma read failed for collection" (:name coll) ":" (:message result)))
+    result))
+
+(defn- rows-across
+  "Every row matching GET-OPTS across COLLS."
+  [colls get-opts]
+  (mapcat #(:ok (read-rows % get-opts) []) colls))
 
 (defn query-entries
   "Query memory entries from Chroma with filtering.
    :exclude-tags — seq of tags to exclude via $not_contains."
-  [& {:keys [type project-id project-ids tags exclude-tags limit include-expired?]
-      :or {limit 100 include-expired? false}}]
+  [& {:keys [type limit include-expired?] :or {limit 100 include-expired? false} :as opts}]
   (emb/require-embedding!)
-  (let [colls (read-collections type)
-        base-clause (cond-> {}
-                      type (assoc :type type)
-                      project-ids (assoc :project-id {:$in (vec project-ids)})
-                      (and project-id (not project-ids)) (assoc :project-id project-id))
-        tag-conditions (when (seq tags)
-                         (mapv (fn [tag] {:tags {:$contains tag}}) tags))
-        exclude-conditions (when (seq exclude-tags)
-                             (mapv (fn [tag] {:tags {:$not_contains tag}}) exclude-tags))
-        all-extra (concat tag-conditions exclude-conditions)
-        where (cond
-                (seq all-extra)
-                (let [base-conditions (mapv (fn [[k v]] {k v}) base-clause)]
-                  {:$and (into base-conditions all-extra)})
-                (seq base-clause) base-clause
-                :else nil)
-        fetch-limit (if include-expired? limit (+ limit 50))
-        ;; PERF: include only :metadatas — see docs/carto-tag-query-perf.md
-        results (mapcat (fn [coll]
-                          (try (gate/deref-read (chroma/get coll
-                                                           :where where
-                                                           :include #{:metadatas}
-                                                           :limit fetch-limit))
-                               (catch Exception _ [])))
-                        colls)
-        entries (map h/metadata->entry results)
+  (let [;; PERF: include only :metadatas — see docs/carto-tag-query-perf.md
+        rows    (rows-across (read-collections type)
+                             {:where   (query-where opts)
+                              :include #{:metadatas}
+                              :limit   (if include-expired? limit (+ limit 50))})
+        entries (map h/metadata->entry rows)
         {expired true live false} (group-by #(boolean (h/expired? %)) entries)]
     (when-not include-expired?
       (evict-expired-async! (mapv :id expired)))
@@ -312,6 +404,19 @@
          (sort-by :created #(compare %2 %1))
          (take limit)
          vec)))
+
+(def ^:private GetOpts
+  "Vendor `chroma/get` keyword options."
+  [:map [:where {:optional true} Where] [:include {:optional true} :any]
+   [:limit {:optional true} pos-int?]])
+
+(def ^:private ReadResult
+  [:or [:map [:ok [:sequential :map]]] [:map [:error :keyword]]])
+
+(m/=> query-where [:=> [:cat QueryFilters] Where])
+(m/=> read-rows [:=> [:cat chroma/Coll GetOpts] ReadResult])
+(m/=> rows-across [:=> [:cat [:sequential chroma/Coll] GetOpts] [:sequential :map]])
+(m/=> routed-collection [:=> [:cat [:maybe [:or :string :keyword]] :string] chroma/Coll])
 
 (m/=> query-entries [:=> [:cat [:* :any]] [:vector Entry]])
 
@@ -389,21 +494,15 @@
    falling off the query window."
   [type content-hash & {:keys [project-id]}]
   (emb/require-embedding!)
-  (let [colls (read-collections type)
-        base-clause (cond-> {:content-hash content-hash}
+  (let [base-clause (cond-> {:content-hash content-hash}
                       type       (assoc :type type)
                       project-id (assoc :project-id project-id))
         where (if (< 1 (count base-clause))
                 {:$and (mapv (fn [[k v]] {k v}) base-clause)}
-                base-clause)
-        results (mapcat (fn [coll]
-                          (try (gate/deref-read (chroma/get coll
-                                                            :where where
-                                                            :include #{:metadatas}
-                                                            :limit 1))
-                               (catch Exception _ [])))
-                        colls)]
-    (first (map h/metadata->entry results))))
+                base-clause)]
+    (some-> (first (rows-across (read-collections type)
+                                {:where where :include #{:metadatas} :limit 1}))
+            h/metadata->entry)))
 
 (m/=> find-duplicate [:=> [:cat [:maybe [:or :string :keyword]] [:maybe :string] [:* :any]] [:maybe Entry]])
 
@@ -493,6 +592,12 @@
           (< n scan-attempts) (recur (inc n))
           :else (throw (ex-info "chroma scan-ids: consecutive passes never agreed"
                                 {:attempts n :first (count a) :second (count b)})))))))
+
+(m/=> transient-key? [:=> [:cat :any] :boolean])
+(m/=> evict-expired-async! [:=> [:cat [:sequential :any]] :any])
+(m/=> scan-collections [:=> [:cat] [:sequential chroma/Coll]])
+(m/=> collection-rows [:=> [:cat chroma/Coll] [:vector :map]])
+(m/=> scan-pass [:=> [:cat [:maybe :boolean]] [:vector :any]])
 
 (m/=> delete-all-entries! [:=> [:cat] [:int {:min 0}]])
 

@@ -1,0 +1,25 @@
+{:case-0
+ {:out {:project-id "global"},
+  :in {:project-id "global", :exclude-tags nil}},
+ :case-1
+ {:out {:project-id "global"},
+  :in
+  {:type nil,
+   :project-id "global",
+   :project-ids nil,
+   :tags nil,
+   :exclude-tags []}},
+ :case-2
+ {:out {:$and [{:tags {:$contains "b"}} {:tags {:$contains "a"}}]},
+  :in {:project-id nil, :tags ["b" "a"], :exclude-tags nil}},
+ :case-3 {:out nil, :in {}},
+ :case-4
+ {:out {:type "decision"},
+  :in {:type "decision", :project-id nil, :tags nil}},
+ :case-5
+ {:out {:$and [{:tags {:$contains "b"}}]},
+  :in {:project-id nil, :tags ["b"], :exclude-tags []}},
+ :case-6
+ {:out {:project-id {:$in ["p1"]}},
+  :in {:project-ids ["p1"], :exclude-tags []}},
+ :case-7 {:out nil, :in {:project-ids nil, :tags []}}}
