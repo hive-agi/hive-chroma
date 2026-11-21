@@ -25,7 +25,7 @@
   (let [stores (mem-reg/registered-stores)]
     (or (:chroma stores)
         (let [d (:default stores)]
-          (when (instance? hive_chroma.store.ChromaMemoryStore d) d)))))
+          (when (store/chroma-store? d) d)))))
 
 (defrecord ChromaShutdown []
   lifecycle/IShutdownHook
@@ -38,7 +38,7 @@
             (log/info "chroma shutdown complete"))
         (log/debug "chroma store not registered; skipping"))
       (catch Throwable t
-        (log/error t "chroma close failed")))))
+        (log/error "chroma close failed:" (ex-message t))))))
 
 (defn install!
   "Register the shutdown hook. Idempotent: the registry is keyed by name."
@@ -47,6 +47,3 @@
 
 (m/=> chroma-store [:=> [:cat] :any])
 (m/=> install! [:=> [:cat] :any])
-
-;; Keeps the store ns loaded before the instance? check above is compiled.
-(def ^:private store-ns store/create-store)
