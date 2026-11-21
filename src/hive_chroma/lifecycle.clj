@@ -17,7 +17,7 @@
             [hive-spi.memory.ports :as mem-ports]
             [hive-spi.memory.registry :as mem-reg]
             [malli.core :as m]
-            [taoensso.timbre :as log]))
+            [hive-spi.log.ports :as log]))
 
 (defn chroma-store
   "The Chroma store this process registered, or nil."

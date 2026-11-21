@@ -6,7 +6,7 @@
             [hive-chroma.host :as emb]
             [hive-chroma.gate :as gate]
             [hive-chroma.helpers :as h]
-            [taoensso.timbre :as log]
+            [hive-spi.log.ports :as log]
             [malli.core :as m]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>

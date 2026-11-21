@@ -4,7 +4,7 @@
             [hive-chroma.host :as emb]
             [hive-chroma.host :as embedding-service]
             [hive-chroma.host :as space]
-            [taoensso.timbre :as log] [hive-dsl.result :refer [rescue]]
+            [hive-spi.log.ports :as log] [hive-dsl.result :refer [rescue]]
             [malli.core :as m]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>

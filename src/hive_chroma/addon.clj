@@ -32,7 +32,7 @@
             [hive-spi.memory.ports :as mem-ports]
             [hive-spi.memory.registry :as mem-reg]
             [malli.core :as m]
-            [taoensso.timbre :as log]))
+            [hive-spi.log.ports :as log]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;

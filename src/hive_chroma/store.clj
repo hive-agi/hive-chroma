@@ -13,7 +13,7 @@
             [hive-chroma.search :as csearch]
             [hive-chroma.maintenance :as cmaint]
             [hive-dsl.result :as result]
-            [taoensso.timbre :as log]
+            [hive-spi.log.ports :as log]
             [clojure.string :as str]
             [hive-spi.memory.ports :as ports]
             [hive-chroma.helpers :as h]))

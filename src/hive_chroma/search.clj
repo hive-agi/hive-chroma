@@ -6,7 +6,7 @@
             [hive-chroma.gate :as gate]
             [hive-chroma.host :as embedding-service]
             [hive-dsl.result :as r]
-            [taoensso.timbre :as log]
+            [hive-spi.log.ports :as log]
             [hive-chroma.host :as ingest-search]
             [hive-chroma.host :as role]
             [hive-chroma.host :as config]
