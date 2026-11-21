@@ -18,7 +18,10 @@
             [clojure.test.check.clojure-test :refer [defspec]]
             [hive-weave.gate :as g]
             [hive-dsl.result :as r]
-            [hive-chroma.gate :as cg]))
+            [hive-chroma.gate :as cg]
+            ;; Publishes the stub host, whose one-permit process gate the
+            ;; legacy embedding gate must delegate to.
+            [hive-chroma.test.host]))
 
 ;; =============================================================================
 ;; Generators

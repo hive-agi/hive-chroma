@@ -21,13 +21,12 @@
             [hive-chroma.connection :as conn]
             [hive-chroma.crud :as crud]
             [hive-chroma.test.fixtures :as cfg]
-            [hive-mcp.embeddings.active :as active]
+            [hive-chroma.test.host :as active]
             [hive-chroma.store :as chroma-store]
             [hive-chroma.test.fixtures :as fixtures]
             [hive-chroma.stub.transport :as transport]
             [clojure.string]
-            [hive-mcp.protocols.memory :as mem-proto]
-            [hive-mcp.tools.catchup.hierarchy :as hier]
+            [hive-chroma.test.memory-port :as mem-proto]
             [hive-spi.memory.ports :as ports]
             [hive-spi.memory.decorate :as decorate]
             [hive-spi.embeddings.ports :as emb-ports]))
@@ -129,6 +128,11 @@
                                (mapv #(select-keys % (map keyword fields)) rows)
                                rows))]]})
 
+(def ^:private catchup-metadata-projection
+  "The phase-1 metadata projection a host's catchup scan asks a store for
+   (Milvus column spellings): no content, embedding or document."
+  ["id" "type" "tags" "created" "expires" "project_id"])
+
 (deftest chroma-catchup-metadata-scan-then-hydrate
   (testing "the catchup metadata projection keeps :project-id and get-entries restores :content"
     (let [s   (chroma-store/create-store)
@@ -139,7 +143,7 @@
           row (first (filter #(= id (:id %))
                              (mem-proto/query-entries
                               s {:type "decision" :limit 10
-                                 :output-fields hier/metadata-projection})))]
+                                 :output-fields catchup-metadata-projection})))]
       (is (= "p1" (:project-id row)) "project_id must map to :project-id")
       (is (nil? (:content row)) "the metadata scan carries no content")
       (is (mem-proto/batch-store? s) "hydration needs IMemoryStoreBatch")

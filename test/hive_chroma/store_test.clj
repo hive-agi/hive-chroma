@@ -9,13 +9,13 @@
    5. Store status and health reporting"
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [hive-chroma.store :as chroma-store]
-            [hive-mcp.protocols.memory :as mem-proto]
+            [hive-chroma.test.memory-port :as mem-proto]
             [hive-test.golden :refer [deftest-golden]]
             [hive-schemas.test :refer [deftrifecta-from-schema]]
             [hive-chroma.client :as client]
             [hive-chroma.connection :as chroma-conn]
             [hive-chroma.test.fixtures :as cfg]
-            [hive-mcp.embeddings.active :as active]
+            [hive-chroma.test.host :as active]
             [hive-chroma.test.fixtures :as fixtures]
             [hive-chroma.stub.transport :as transport]))
 

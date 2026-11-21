@@ -1,7 +1,7 @@
 {:config-keys (:collection-name :host :port),
  :status
  {:configured? true,
-  :provider "class hive_mcp.embeddings.shared_gate.GatedProvider",
+  :provider "class hive_chroma.test.fixtures.MockEmbedder",
   :collection "hive-mcp-memory",
   :host "localhost",
   :port 8000},

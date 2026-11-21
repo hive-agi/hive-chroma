@@ -6,7 +6,7 @@
   (:require [clojure.test :refer [deftest is]]
             [hive-chroma.client :as client]
             [hive-chroma.vector-store :as vs]
-            [hive-mcp.protocols.vector :as vp]
+            [hive-spi.vector.ports :as vp]
             [hive-chroma.stub.transport :as transport]
             [hive-test.golden :refer [deftest-golden]]))
 

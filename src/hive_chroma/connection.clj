@@ -166,6 +166,47 @@
 
 (m/=> reset-collection-cache! [:=> [:cat] [:map-of {:max 0} :any :any]])
 
+(defn collection-names
+  "Every collection this process could legitimately read: the default
+   (unnamed) collection plus every collection a configured provider's dimension
+   writes to. `extra` adds names the caller knows about (legacy collections a
+   scan visits). Config only: it opens nothing and creates nothing."
+  ([] (collection-names nil))
+  ([extra]
+   (vec (distinct (concat [(:collection-name @config)]
+                          (rescue [] (embedding-service/all-collection-names))
+                          extra)))))
+
+(defn collection-space-audit
+  "Provenance of every collection this process could read, as data: one row per
+   collection that EXISTS, from `space/audit`. Never creates a collection and
+   never throws on a mismatch: this is the listing an operator uses to find the
+   collections that need isolating or re-embedding, which is why a divergent one
+   is reported :diverged instead of refused.
+
+   Opts:
+     :names - extra collection names to include (legacy/sibling ones)
+     :space - the EmbeddingSpace a caller is about to use; with it each row also
+              carries :expected-id and the keys a divergent collection differs on."
+  ([] (collection-space-audit nil))
+  ([opts]
+   (let [expected (:space opts)]
+     (vec (keep (fn [n]
+                  (when-let [coll (try-get-collection n)]
+                    (space/audit n expected (:metadata coll))))
+                (collection-names (:names opts)))))))
+
+(m/=> collection-names [:function [:=> [:cat] [:vector :string]]
+                        [:=> [:cat [:maybe [:sequential :string]]] [:vector :string]]])
+
+(m/=> collection-space-audit
+      [:function
+       [:=> [:cat] [:sequential space/AuditRow]]
+       [:=> [:cat [:maybe [:map
+                           [:names {:optional true} [:maybe [:sequential :string]]]
+                           [:space {:optional true} [:maybe [:map-of :keyword :any]]]]]]
+        [:sequential space/AuditRow]]])
+
 (defn status
   "Get Chroma integration status."
   []

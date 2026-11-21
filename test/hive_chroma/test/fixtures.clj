@@ -1,11 +1,9 @@
 (ns hive-chroma.test.fixtures
   "Test doubles for hive-chroma: a deterministic embedding provider and a
-   config binding, both injected through the host's own ports (no
-   with-redefs). Ported from hive-mcp.test-fixtures and
-   hive-mcp.config.test-support, which live in hive-mcp's test tree and so
-   are not on this repo's classpath."
-  (:require [hive-mcp.config.core :as config]
-            [hive-mcp.config.source :as src]
+   config binding, both injected through the stub host
+   (hive-chroma.test.host), which is published through hive-spi. No
+   with-redefs, no hive-mcp."
+  (:require [hive-chroma.test.host :as host]
             [hive-spi.embeddings.ports :as emb]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -31,15 +29,10 @@
   ([] (->MockEmbedder 384))
   ([dimension] (MockEmbedder. dimension)))
 
-(defn config-source
-  "A mutable in-memory config source seeded with `config`."
-  [config]
-  (src/atom-source (atom config) config))
-
 (defn with-config*
   "Run `f` with `config` bound as the effective host config."
   [config f]
-  (binding [config/*config-source* (config-source config)]
+  (binding [host/*config* config]
     (f)))
 
 (defmacro with-config
@@ -48,7 +41,7 @@
   `(with-config* ~config (fn [] ~@body)))
 
 (defmacro with-no-config
-  "Bind the empty source: every config lookup misses."
+  "Bind the empty config: every config lookup misses."
   [& body]
-  `(binding [config/*config-source* (src/empty-source)]
+  `(binding [host/*config* {}]
      ~@body))

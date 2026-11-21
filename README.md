@@ -11,7 +11,7 @@ with their git history kept (`git log --follow src/hive_chroma/crud.clj`).
 | Port | Implementation |
 |------|----------------|
 | `hive-spi.memory.ports/IMemoryStore` (+ Analytics, Staleness, Batch, Scan, Liveness) | `hive-chroma.store/ChromaMemoryStore` |
-| the host's `IVectorCollectionStore` (`hive-mcp.protocols.vector`, published as `hive-spi.vector.ports`) | `hive-chroma.vector-store` |
+| the host's `IVectorCollectionStore` (published as `hive-spi.vector.ports`; the host hands its own over `:vector/port`) | `hive-chroma.vector-store` |
 | `hive-spi.lifecycle.ports/IShutdownHook` (priority 210) | `hive-chroma.lifecycle` |
 | `hive-addon.protocol/IAddon` | `hive-chroma.addon` (manifest `META-INF/hive-addons/hive-chroma.edn`, id `hive.chroma`) |
 
@@ -19,13 +19,18 @@ On `initialize!` the addon registers its store under `:chroma` (`:registry-key`)
 the active `:default` slot **only when it is empty** or when `:active? true` is set. It never
 evicts another backend. It offers itself as the vector-collection store on the same terms.
 
-## No compile-time host dependency
+## Depends on hive-spi, never on its host
 
-No namespace under `src/` requires hive-mcp. Every host service (the active embedding
-provider, per-type routing, embedding spaces, config, the process-wide embedding gate,
-federated ingest search) is soft-resolved through `hive-chroma.host` (`hive-addon.host/defsoft`).
-Each one declares its degraded value, and `addon_test` asserts that every declared host
-symbol resolves against the pinned hive-mcp.
+hive-chroma depends on hive-spi (and generic libs) only: hive-mcp is on no classpath, in no
+scope, and no host symbol is resolved at runtime either. Every host service (the active
+embedding provider, per-type routing and spaces, config, the process-wide embedding gate,
+federated ingest search, the host's vector-collection port) arrives through
+`hive-spi.vector.host-services`: the host publishes capability -> fn at boot (hive-mcp does
+it in `hive-mcp.embeddings.host-services`), and `hive-chroma.host` calls through it. Each
+call declares its degraded value for a host that published nothing. The pure
+embedding-space layer (stamp, admit, audit) comes straight from `hive-spi.embeddings.space`.
+
+`addon_test` asserts every capability the backend consumes is in hive-spi's catalog.
 
 ## Config
 
@@ -39,7 +44,8 @@ clojure -M:test        # in-memory IChromaTransport stub, no server
 clojure -M:test-e2e    # against a live Chroma (CHROMA_HOST/CHROMA_PORT)
 ```
 
-Tests inject stub adapters at the transport and embedder ports. Nothing uses `with-redefs`.
+Tests inject stub adapters at the transport port and a stub host published through hive-spi
+(`test/hive_chroma/test/host.clj`). Nothing uses `with-redefs`.
 
 ## License
 

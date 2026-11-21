@@ -5,7 +5,7 @@
    DEFAULT TIER: ChromaMemoryStore over the in-memory IChromaTransport
    (hive-chroma.stub.transport), so the adapter is held to the
    contract with no Chroma server. The e2e tier rebinds *backend* to a
-   throwaway Chroma container (test-e2e/hive_mcp/e2e/chroma_test.clj) and runs
+   throwaway Chroma container (test-e2e/hive_chroma/e2e_test.clj) and runs
    these same deftests, which is what proves the stub faithful
    (axiom 20260729111910-400b5763).
 
@@ -22,9 +22,9 @@
             [hive-chroma.client :as client]
             [hive-chroma.connection :as chroma-conn]
             [hive-chroma.test.fixtures :as cfg]
-            [hive-mcp.embeddings.active :as active]
+            [hive-chroma.test.host :as active]
             [hive-chroma.store :as chroma-store]
-            [hive-mcp.protocols.memory :as proto]
+            [hive-chroma.test.memory-port :as proto]
             [hive-chroma.test.fixtures :as fixtures]
             [hive-chroma.stub.transport :as transport]))
 
