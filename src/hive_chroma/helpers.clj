@@ -154,6 +154,9 @@
        (when-let [t (join-tags tags)] (str "Tags: " (str/replace t "," ", ") "\n"))
        "Content: " (serialize-content content)))
 
+(m/=> json-string? [:=> [:cat [:maybe :string]] :any])
+(m/=> normalize-whitespace [:=> [:cat :string] :string])
+
 (m/=> memory-to-document [:=> [:cat [:map [:content {:optional true} :any] [:type {:optional true} :any] [:tags {:optional true} [:maybe [:sequential :any]]]]] :string])
 
 (def metadata-defaults

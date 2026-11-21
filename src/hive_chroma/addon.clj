@@ -85,6 +85,10 @@
       (log/warn "hive-chroma vector-collection store not installed (non-fatal):" (ex-message t))
       :failed)))
 
+(m/=> claim-default? [:=> [:cat [:map [:active? {:optional true} :any]]] :any])
+(m/=> env [:=> [:cat :string] [:maybe :string]])
+(m/=> offer-vector-store! [:=> [:cat] [:enum :installed :kept :host-absent :failed]])
+
 (defrecord ChromaAddon [state]
   addon-proto/IAddon
 

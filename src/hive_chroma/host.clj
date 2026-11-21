@@ -17,6 +17,7 @@
      - a pure shaping helper falls back to the identity of its input,
      - an embed call or the embedding guard THROWS, because a write or a
        search that silently skipped its vector would store or answer garbage."
+  {:clj-kondo/config '{:lint-as {hive-chroma.host/defservice clojure.core/def}}}
   (:require [hive-spi.embeddings.space :as spi-space]
             [hive-spi.vector.host-services :as hs]
             [hive-spi.vector.ports :as vp]
@@ -33,6 +34,9 @@
                   {:error :hive-chroma/host-absent :host/capability cap})))
 
 (defn- absent-thrower [cap] (fn [& _] (host-absent! cap)))
+
+(m/=> host-absent! [:=> [:cat :keyword] :nil])
+(m/=> absent-thrower [:=> [:cat :keyword] ifn?])
 
 (defmacro ^:private defservice
   "Def NAME as the host capability CAP, called through

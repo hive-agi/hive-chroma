@@ -593,6 +593,12 @@
           :else (throw (ex-info "chroma scan-ids: consecutive passes never agreed"
                                 {:attempts n :first (count a) :second (count b)})))))))
 
+(m/=> transient-key? [:=> [:cat :any] :boolean])
+(m/=> evict-expired-async! [:=> [:cat [:sequential :any]] :any])
+(m/=> scan-collections [:=> [:cat] [:sequential chroma/Coll]])
+(m/=> collection-rows [:=> [:cat chroma/Coll] [:vector :map]])
+(m/=> scan-pass [:=> [:cat [:maybe :boolean]] [:vector :any]])
+
 (m/=> delete-all-entries! [:=> [:cat] [:int {:min 0}]])
 
 (m/=> strip-transient [:=> [:cat :any] :any])
