@@ -152,6 +152,29 @@
                     coll))]
      (if space (admit-space! coll-name coll space) coll))))
 
+(def Route
+  "A host embedding route (resolve-provider-for-type*): provider, dimension,
+   collection name and provider key. Nil when the host routes nothing."
+  [:maybe [:map
+           [:provider {:optional true} :any]
+           [:dimension {:optional true} [:maybe pos-int?]]
+           [:collection-name {:optional true} :string]
+           [:provider-key {:optional true} :any]]])
+
+(defn collection-for-route
+  "The collection ROUTE writes to and reads from, space-guarded: a collection
+   stamped with another embedding space refuses it (:embedding-space-mismatch).
+   With no route, the default collection under the global provider's space."
+  [route]
+  (if route
+    (get-or-create-named-collection
+      (:collection-name route) (:dimension route)
+      (embedding-service/space-for-resolved route {:metric metric}))
+    (get-or-create-collection
+      (embedding-service/default-space {:metric metric}))))
+
+(m/=> collection-for-route [:=> [:cat Route] chroma/Coll])
+
 (m/=> get-or-create-named-collection
       [:function
        [:=> [:cat :string pos-int?] chroma/Coll]

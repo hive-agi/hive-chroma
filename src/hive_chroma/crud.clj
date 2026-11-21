@@ -150,16 +150,10 @@
     resolved))
 
 (defn- route-collection
-  "Boundary: the collection RESOLVED writes to, space-guarded: a collection
-   stamped with another embedding space refuses it (:embedding-space-mismatch).
-   With no route, the default collection under the global provider's space."
+  "Boundary: the space-guarded collection RESOLVED writes to
+   (see `conn/collection-for-route`)."
   [resolved]
-  (if resolved
-    (conn/get-or-create-named-collection
-      (:collection-name resolved) (:dimension resolved)
-      (embedding-service/space-for-resolved resolved {:metric conn/metric}))
-    (conn/get-or-create-collection
-      (embedding-service/default-space {:metric conn/metric}))))
+  (conn/collection-for-route resolved))
 
 (defn- attempt-embed
   "Embed TEXT with PROVIDER as a Result: {:ok vector} or
@@ -242,12 +236,8 @@
     entry-id))
 
 (def ^:private Resolved
-  "A host route: provider, dimension, collection and provider key."
-  [:maybe [:map
-           [:provider {:optional true} :any]
-           [:dimension {:optional true} [:maybe pos-int?]]
-           [:collection-name {:optional true} :string]
-           [:provider-key {:optional true} :any]]])
+  "A host route (see `conn/Route`)."
+  conn/Route)
 
 (def ^:private EmbedResult
   "An embed attempt: {:ok vector} or {:error :embed/failed :cause throwable}."
