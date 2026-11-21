@@ -7,7 +7,7 @@
             [hive-chroma.crud :as crud]
             [hive-chroma.search :as search]
             [hive-chroma.test.fixtures :as cfg]
-            [hive-mcp.embeddings.active :as active]
+            [hive-chroma.test.host :as active]
             [hive-chroma.test.fixtures :as fixtures]
             [hive-chroma.stub.transport :as transport]
             [hive-schemas.test :refer [deftrifecta-from-schema]]

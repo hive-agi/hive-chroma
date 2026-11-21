@@ -3,7 +3,6 @@
    deterministic embedder, and the real hive-spi memory registry restored
    around each test. No server, no with-redefs."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-addon.host :as soft]
             [hive-addon.protocol :as addon-proto]
             [hive-chroma.addon :as addon]
             [hive-chroma.client :as client]
@@ -12,8 +11,10 @@
             [hive-chroma.stub.transport :as transport]
             [hive-chroma.test.fixtures :as fixtures]
             [hive-chroma.test.registry-isolation :as isolation]
-            [hive-mcp.embeddings.active :as active]
-            [hive-spi.memory.registry :as mem-reg]))
+            [hive-chroma.test.host :as active]
+            [hive-chroma.host :as host]
+            [hive-spi.memory.registry :as mem-reg]
+            [hive-spi.vector.host-services :as hs]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -74,9 +75,13 @@
       (addon-proto/shutdown! a)
       (is (identical? other (mem-reg/get-store))))))
 
-(deftest every-declared-host-symbol-resolves
-  (is (= {} (soft/unresolvable '[hive-chroma.host]))
-      "a host rename must fail here, not degrade silently"))
+(deftest every-consumed-host-capability-is-published-spi
+  (let [consumed (host/consumed-capabilities)]
+    (is (< 25 (count consumed)) "the backend's whole host surface is enumerated")
+    (is (empty? (remove (set (keys hs/catalog)) consumed))
+        "a capability outside hive-spi's catalog would degrade silently forever")
+    (is (empty? (remove (hs/capabilities) consumed))
+        "the stub host publishes every capability the backend consumes")))
 
 (deftest addon-identity
   (let [a (addon/create-addon)]

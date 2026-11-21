@@ -20,7 +20,8 @@
      :vector-store?                 offer the vector-collection port, default true
 
    No namespace here requires the host: everything host-side goes through
-   hive-chroma.host, so this loads, and degrades, with no hive-mcp."
+   hive-chroma.host, i.e. through hive-spi's host-services registry, so this
+   loads, and degrades, with no host at all."
   (:require [hive-addon.protocol :as addon-proto]
             [hive-chroma.client :as client]
             [hive-chroma.connection :as conn]

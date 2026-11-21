@@ -2,25 +2,23 @@
   "Collection provenance: a vector collection is stamped with the embedding
    space it was created in, and every write and search through it is refused
    when the provider now emits another space. Unstamped (legacy) collections
-   are admitted, never refused.
+   are admitted, never refused, and `collection-space-audit` lists every
+   collection's provenance as data.
 
-   Everything runs over stub ports: the in-memory Chroma transport, a mock
-   embedder handed out by the registry, an EDN config and a digest resolver
-   that answers from an atom. No live store, no Ollama."
+   Everything runs over stub ports: the in-memory Chroma transport, the stub
+   host published through hive-spi (hive-chroma.test.host) with a mock
+   embedder per routed provider, an EDN config and a digest resolver that
+   answers from an atom. No live store, no Ollama, no hive-mcp."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [hive-chroma.client :as client]
             [hive-chroma.connection :as conn]
             [hive-chroma.crud :as crud]
             [hive-chroma.gate :as gate]
             [hive-chroma.search :as search]
-            [hive-chroma.test.fixtures :as cfg]
-            [hive-mcp.embeddings.active :as active]
-            [hive-mcp.embeddings.ollama :as ollama]
-            [hive-mcp.embeddings.registry :as registry]
-            [hive-mcp.embeddings.service :as service]
-            [hive-mcp.embeddings.space :as space]
             [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.test.host :as host]
             [hive-chroma.stub.transport :as transport]
+            [hive-spi.embeddings.space :as space]
             [malli.instrument :as mi]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -38,11 +36,9 @@
 (def ^:private digest (atom "sha256:aaaa"))
 
 (def ^:private contracted
-  #{#'space/space->metadata #'space/metadata->space #'space/admit
-    #'conn/get-or-create-named-collection #'service/space-for-resolved
-    #'conn/get-or-create-collection #'service/default-space
-    #'active/set-embedding-provider! #'active/get-embedding-provider-spec
-    #'ollama/digest-in-tags})
+  #{#'space/space->metadata #'space/metadata->space #'space/admit #'space/audit
+    #'conn/get-or-create-named-collection #'conn/get-or-create-collection
+    #'conn/collection-names #'conn/collection-space-audit})
 
 (def ^:private ^:dynamic *transport* nil)
 
@@ -56,40 +52,40 @@
   (reset! @#'conn/named-collection-cache (:named caches))
   (reset! @#'conn/legacy-warned (:legacy-warned caches)))
 
+(defn- digest-port! []
+  (host/set-digest-resolver! (fn [_spec] @digest)))
+
 (defn- stub-ports [f]
   (let [prior-t      (client/transport)
-        prior-p      (active/get-embedding-provider)
-        prior-spec   (active/get-embedding-provider-spec)
+        prior-p      (host/get-embedding-provider)
+        prior-spec   (host/get-embedding-provider-spec)
         prior-caches (connection-caches)
-        resolver-fn  @(deref #'service/digest-resolver)
         t            (transport/->transport)]
     (client/set-transport! t)
-    (active/set-embedding-provider! (fixtures/->MockEmbedder dim))
+    (host/set-embedding-provider! (fixtures/->MockEmbedder dim))
     (conn/reset-collection-cache!)
-    (registry/clear-cache!)
     (reset! digest "sha256:aaaa")
-    (service/set-digest-resolver! (fn [_spec] @digest))
+    (digest-port!)
     (mi/instrument! {:filters [(mi/-filter-var contracted)]})
     (try
-      (with-redefs [registry/get-provider (fn [c] (fixtures/->MockEmbedder (:dimension c)))]
-        (binding [*transport* t]
-          (cfg/with-config embedder-config (f))))
+      (binding [host/*provider-factory* (fn [spec] (fixtures/->MockEmbedder (:dimension spec)))
+                *transport* t]
+        (fixtures/with-config embedder-config (f)))
       (finally
         (mi/unstrument! {:filters [(mi/-filter-var contracted)]})
-        (service/set-digest-resolver! resolver-fn)
+        (host/set-digest-resolver! (fn [_spec] nil))
         (restore-connection-caches! prior-caches)
-        (registry/clear-cache!)
         (client/set-transport! prior-t)
         (if prior-p
-          (active/set-embedding-provider! prior-p prior-spec)
-          (active/reset-embedding-provider!))))))
+          (host/set-embedding-provider! prior-p prior-spec)
+          (host/reset-embedding-provider!))))))
 
 (use-fixtures :each stub-ports)
 
 (defn- space-of [overrides]
   (space/->space (merge {:provider :ollama :model "stub-embed" :digest "sha256:aaaa"
                          :dimension dim :metric :l2 :query-template-rev "raw"
-                         :doc-serializer-rev service/doc-serializer-rev}
+                         :doc-serializer-rev host/doc-serializer-rev}
                         overrides)))
 
 (defn- stored-metadata [name]
@@ -175,7 +171,6 @@
     (is (= 1 (transport/record-count *transport*)))
     (testing "the same tag re-pulled with new weights refuses to write"
       (reset! digest "sha256:bbbb")
-      (service/set-digest-resolver! (fn [_spec] @digest))
       (conn/reset-collection-cache!)
       (let [data (thrown-data #(crud/index-memory-entry! {:id "e2" :type "note" :content "beta"}))]
         (is (= :embedding-space-mismatch (:error data)))
@@ -187,7 +182,6 @@
   (crud/index-memory-entry! {:id "e1" :type "note" :content "alpha"})
   (is (= ["e1"] (mapv :id (search/search-similar "alpha" :type "note" :limit 3))))
   (reset! digest "sha256:bbbb")
-  (service/set-digest-resolver! (fn [_spec] @digest))
   (conn/reset-collection-cache!)
   (is (= :embedding-space-mismatch
          (:error (thrown-data #(search/search-similar "alpha" :type "note" :limit 3))))
@@ -208,17 +202,14 @@
 (defn- default-name [] (:collection-name (conn/get-config)))
 
 (defn- name-global-provider! []
-  (active/set-embedding-provider! (fixtures/->MockEmbedder dim) global-spec))
+  (host/set-embedding-provider! (fixtures/->MockEmbedder dim) global-spec))
 
 (def ^:private batch
   [{:id "b1" :type "note" :content "alpha"} {:id "b2" :type "note" :content "beta"}])
 
 (deftest default-collection-is-stamped
-  (testing "a global provider set with a spec names the default space"
-    (is (nil? (service/default-space {:metric :l2})) "no spec, no nameable space")
-    (name-global-provider!)
-    (is (= (space-of {}) (service/default-space {:metric :l2}))))
   (testing "the unguarded accessor stamps the collection it creates"
+    (name-global-provider!)
     (is (= (default-name) (:name (conn/get-or-create-collection))))
     (is (= (space-of {}) (space/metadata->space (stored-metadata (default-name))))))
   (testing "the guarded arity admits the stamped space and refuses another"
@@ -242,7 +233,6 @@
   (name-global-provider!)
   (crud/index-memory-entries! batch)
   (reset! digest "sha256:bbbb")
-  (service/set-digest-resolver! (fn [_spec] @digest))
   (testing "refused through the cached collection and after the cache is dropped"
     (doseq [drop-cache? [false true]]
       (when drop-cache? (conn/reset-collection-cache!))
@@ -259,49 +249,18 @@
   (is (nil? (space/metadata->space (stored-metadata (default-name))))
       "admitting a legacy collection never rewrites it"))
 
-;; =============================================================================
-;; Space of a resolved provider; Ollama digest
-;; =============================================================================
-
-(deftest space-for-resolved-names-the-provider-space
-  (let [resolved (service/resolve-provider-for-type "note")]
-    (is (= (space-of {}) (service/space-for-resolved resolved {:metric :l2})))
-    (testing "a declared digest wins over the port"
-      (cfg/with-config (assoc-in embedder-config [:embedder :providers :stub-8 :digest] "sha256:decl")
-        (is (= "sha256:decl" (:digest (service/space-for-resolved resolved))))))
-    (testing "the global fallback has no nameable space until its provider is set with a spec"
-      (is (nil? (service/space-for-resolved {:provider-key :fallback :dimension dim})))
-      (active/set-embedding-provider! (fixtures/->MockEmbedder dim)
-                                      {:impl :ollama :model "stub-embed" :host "http://stub.invalid"})
-      (is (= (space-of {})
-             (service/space-for-resolved {:provider-key :fallback :dimension dim} {:metric :l2}))))))
-
-(deftest ollama-digest-from-tags
-  (let [tags {:models [{:name "qwen3-embedding:4b" :model "qwen3-embedding:4b" :digest "d4b"}
-                       {:name "nomic-embed-text:latest" :model "nomic-embed-text:latest" :digest "dn"}]}]
-    (is (= "d4b" (ollama/digest-in-tags tags "qwen3-embedding:4b")))
-    (is (= "dn" (ollama/digest-in-tags tags "nomic-embed-text")) "bare name = :latest")
-    (is (nil? (ollama/digest-in-tags tags "absent")))
-    (is (nil? (ollama/digest-in-tags nil "absent")))))
-
-(deftest default-space-returns-nil-when-digest-unresolved
-  (testing "default-space returns nil when the digest resolver returns nil"
-    (let [spec {:impl :ollama :model "stub-embed" :host "http://stub.invalid"}]
-      (active/set-embedding-provider! (fixtures/->MockEmbedder dim) spec)
-      ;; Stub the resolver to return nil (digest unresolved)
-      (service/set-digest-resolver! (fn [_spec] nil))
-      (is (nil? (service/default-space {:metric :l2}))
-          "default-space should be nil when digest cannot be resolved"))
-    (testing "and the collection stays unstamped (no metadata written)"
-      (conn/reset-collection-cache!)
-      (let [coll (conn/get-or-create-collection)]
-        (is (nil? (space/metadata->space (stored-metadata (default-name))))
-            "no stamp metadata should be present in the collection")))))
+(deftest default-collection-stays-unstamped-when-the-digest-is-unresolved
+  (name-global-provider!)
+  (host/set-digest-resolver! (fn [_spec] nil))
+  (conn/reset-collection-cache!)
+  (conn/get-or-create-collection)
+  (is (nil? (space/metadata->space (stored-metadata (default-name))))
+      "an Ollama model without its served digest names no space, so no stamp"))
 
 (deftest read-path-does-not-stamp
   (testing "real zero-arity read paths do not stamp an existing collection"
     (name-global-provider!)
-    (service/set-digest-resolver! (fn [_spec] "sha256:test-read-digest"))
+    (host/set-digest-resolver! (fn [_spec] "sha256:test-read-digest"))
     (conn/reset-collection-cache!)
     ;; Raw creation leaves a legacy collection. Its metadata is the witness:
     ;; the digest below is resolvable, but no read may write it.
@@ -313,15 +272,40 @@
     (is (nil? (space/metadata->space (stored-metadata (default-name))))
         "chroma-available?, get-entry-by-id and collection-stats never stamp")))
 
-(deftest openai-provider-without-digest-still-names-a-default-space
-  (active/set-embedding-provider!
-   (fixtures/->MockEmbedder dim)
-   {:impl :openai :model "text-embedding-3-small"})
-  ;; The production digest port has no answer for non-Ollama providers.
-  (service/set-digest-resolver! (fn [{:keys [impl]}]
-                                  (when (= :ollama impl) "sha256:unused")))
-  (let [s (service/default-space {:metric :l2})]
-    (is (some? s))
-    (is (= :openai (:provider s)))
-    (is (= "text-embedding-3-small" (:model s)))
-    (is (nil? (:digest s)))))
+;; =============================================================================
+;; Legacy listing: audit every collection without dying on the first mismatch
+;; =============================================================================
+
+(deftest audit-lists-every-collection-that-exists
+  (name-global-provider!)
+  (gate/deref-write (client/create-collection "hive-mcp-memory-legacy" :metadata {:dimension dim}))
+  (conn/reset-collection-cache!)
+  (conn/get-or-create-named-collection coll-name dim (space-of {:digest "sha256:bbbb"}))
+  (let [rows    (conn/collection-space-audit {:names ["hive-mcp-memory-legacy"]
+                                              :space (space-of {})})
+        by-name (into {} (map (juxt :collection identity)) rows)]
+    (testing "every existing collection is visited, and none is created"
+      (is (= #{"hive-mcp-memory-legacy" coll-name} (set (keys by-name))))
+      (is (= #{"hive-mcp-memory-legacy" coll-name} (set (keys @(:state *transport*))))
+          "the audit asks only for names that exist"))
+    (testing "an unstamped collection is legacy with a remedy, not a throw"
+      (is (= :legacy (get-in by-name ["hive-mcp-memory-legacy" :verdict])))
+      (is (= space/unknown-space-id (get-in by-name ["hive-mcp-memory-legacy" :space-id])))
+      (is (= #{:isolate :re-embed} (get-in by-name ["hive-mcp-memory-legacy" :remedy]))))
+    (testing "a collection stamped with another space is divergent, not an exception"
+      (is (= :diverged (get-in by-name [coll-name :verdict])))
+      (is (= [:digest] (get-in by-name [coll-name :differing-keys])))
+      (is (= (space/space-id (space-of {})) (get-in by-name [coll-name :expected-id]))))))
+
+(deftest audit-without-an-expected-space-never-names-one
+  (name-global-provider!)
+  (conn/get-or-create-collection (space-of {}))
+  (let [rows (conn/collection-space-audit)]
+    (is (seq rows) "the default collection exists and is listed")
+    (is (every? #(not (contains? % :expected-id)) rows)
+        "no expected space was given, so no row claims one")
+    (is (every? #(contains? #{:stamped :legacy} (:verdict %)) rows))))
+
+(deftest collection-names-come-from-config-only
+  (is (= ["hive-mcp-memory" coll-name "extra"] (conn/collection-names ["extra"])))
+  (is (empty? @(:state *transport*)) "naming collections opens nothing"))

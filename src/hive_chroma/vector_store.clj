@@ -5,13 +5,12 @@
    host's named-collection port and the vendor transport in
    `hive-chroma.client`.
 
-   The port is declared by the HOST (`hive-mcp.protocols.vector`; the
-   published twin is `hive-spi.vector.ports`). This addon cannot require the
-   host at compile time, so the record is extended onto the port at FACTORY
-   time with `clojure.core/extend`, keyed by the protocol's own method keys
-   (`hive-chroma.host/vector-port`). A standalone compile needs no host; a
-   runtime without the port fails at the factory call with a reason. This is
-   the shape hive-milvus.vector-store uses.
+   The port the host consumes is handed over at runtime (the `:vector/port`
+   host service; with no host, the published `hive-spi.vector.ports` one), so
+   the record is extended onto it at FACTORY time with `clojure.core/extend`,
+   keyed by the protocol's own method keys (`hive-chroma.host/vector-port`).
+   A standalone compile needs no host. This is the shape
+   hive-milvus.vector-store uses.
 
    The vendor client is already record-oriented: `add` takes embedding records,
    `get` and `query` return them, and `query` is documented as ordered by

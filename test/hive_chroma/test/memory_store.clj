@@ -12,7 +12,7 @@
      (seed! store entries)     bulk-add, returns the ids
      (entries store)           current {id -> entry} snapshot
 
-   Contract mirrored from hive-mcp.memory.store.chroma:
+   Contract mirrored from the Chroma store (hive-chroma.store):
      add-entry!       => entry id (string)
      delete-entry!    => true
      cleanup-expired! => {:count n :deleted-ids [id ...] :repaired 0}
@@ -24,7 +24,7 @@
      store-status   => {:backend :configured? :entry-count :supports-search?}"
   (:require [clojure.set :as set]
             [clojure.string :as str]
-            [hive-mcp.memory.ids :as ids]
+            [hive-spi.memory.ids :as ids]
             [hive-spi.memory.ports :as ports]
             [hive-spi.memory.registry :as registry]
             [clojure.data.json :as json]
@@ -300,7 +300,7 @@
 
    OPTS:
      :id-fn       — zero-arg id generator for entries added without an :id.
-                    Defaults to hive-mcp.memory.ids/generate-id; inject a
+                    Defaults to hive-spi.memory.ids/generate-id; inject a
                     constant (or a counter) when a test needs deterministic ids.
      :get-entry-fn — when supplied, `get-entry` answers from this fn and the
                     store's own entry map is not consulted for reads. For a

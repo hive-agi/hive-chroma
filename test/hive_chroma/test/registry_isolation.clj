@@ -1,10 +1,15 @@
 (ns hive-chroma.test.registry-isolation
   "Fail-closed fixtures for tests that mutate the process-wide memory registry.
    Run these tests in a dedicated test JVM, never a server nREPL."
-  (:require [hive-mcp.addons.core :as addons]
-            [hive-mcp.protocols.memory :as memory]))
+  (:require [hive-spi.memory.registry :as memory]))
 
 (def ^:private fixture-lock (Object.))
+
+(def ^:private no-addon-server
+  "What the addon registry reports in this suite's JVM: no host is on the test
+   classpath, so no addon server can be running in it. A shared JVM is still
+   caught by the memory-registry check in `refuse-live-registry!`."
+  {:total 0 :active 0 :registered 0 :error 0})
 
 (defn safe-test-registry?
   "True only when the addon registry reports no installed or active addons."
@@ -16,9 +21,9 @@
 (defn refuse-live-addons!
   "Abort when the addon registry reports a running server (or is malformed).
    The live-nREPL footgun: a fixture that swaps memory stores inside a JVM that
-   hosts addons would clobber the stores those addons are using. With no
-   argument it reads the live registry status; with STATUS it judges that map."
-  ([] (refuse-live-addons! (addons/registry-status)))
+   hosts addons would clobber the stores those addons are using. With STATUS
+   it judges that map."
+  ([] (refuse-live-addons! no-addon-server))
   ([status]
    (when-not (safe-test-registry? status)
      (throw (ex-info "Refusing tests in a live addon registry"

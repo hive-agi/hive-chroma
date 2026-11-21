@@ -2,7 +2,7 @@
   "E2E: the default-tier Chroma suites rerun against a REAL Chroma.
 
    Sandbox: a throwaway chromadb/chroma container on a random 127.0.0.1 port
-   (hive-mcp.e2e.sandbox/with-container), removed afterwards. Never the
+   (hive-chroma.e2e.sandbox/with-container), removed afterwards. Never the
    operator's Chroma on :8000.
 
    What it proves: hive-chroma.memory-test and
@@ -16,7 +16,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [hive-chroma.client :as client]
             [hive-chroma.connection :as conn]
-            [hive-mcp.e2e.sandbox :as sandbox]
+            [hive-chroma.e2e.sandbox :as sandbox]
             [hive-chroma.memory-test :as mc]
             [hive-chroma.store-contract-runner-test :as runner]))
 

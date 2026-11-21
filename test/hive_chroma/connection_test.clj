@@ -5,9 +5,7 @@
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [hive-chroma.client :as client]
             [hive-chroma.connection :as conn]
-            [hive-mcp.embeddings.active :as active]
-            [hive-mcp.embeddings.registry :as registry]
-            [hive-mcp.embeddings.service :as service]
+            [hive-chroma.test.host :as active]
             [hive-chroma.test.fixtures :as fixtures]
             [hive-chroma.stub.transport :as transport]
             [hive-test.golden :refer [deftest-golden]]))
@@ -31,23 +29,22 @@
         prior-p      (active/get-embedding-provider)
         prior-spec   (active/get-embedding-provider-spec)
         prior-cfg    (conn/get-config)
-        prior-caches (connection-caches)
-        resolver-fn  @(deref #'service/digest-resolver)]
+        prior-caches (connection-caches)]
     (client/set-transport! (transport/->transport))
-    (service/set-digest-resolver! (fn [_] nil))
+    (active/set-digest-resolver! (fn [_] nil))
     (conn/reset-collection-cache!)
     (try (f)
          (finally
            (conn/configure! (select-keys prior-cfg [:host :port :collection-name]))
            (restore-connection-caches! prior-caches)
-           (registry/clear-cache!)
            (client/set-transport! prior-t)
-           (service/set-digest-resolver! resolver-fn)
+           (active/set-digest-resolver! (fn [_] nil))
            (if prior-p
              (active/set-embedding-provider! prior-p prior-spec)
              (active/reset-embedding-provider!))))))
 
 (use-fixtures :each own-ports)
+
 
 (deftest-golden status-and-caches-golden
   "test/golden/hive-chroma/connection-status-caches.edn"

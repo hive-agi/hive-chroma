@@ -8,7 +8,7 @@
    adapter code above the seam is the production code, unchanged.
 
    The SAME tests run against a real Chroma in the e2e tier
-   (test-e2e/hive_mcp/e2e/chroma_test.clj binds *backend* to a throwaway
+   (test-e2e/hive_chroma/e2e_test.clj binds *backend* to a throwaway
    container), which is what holds the stub to the real provider's behaviour
    (axiom 20260729111910-400b5763). Before 2026-11-11 every test here was
    ^:integration and probed localhost:8000: skipped in CI, and on a dev host it
@@ -102,11 +102,11 @@
   (testing "Status returns provider info"
     (let [status (chroma/status)]
       (is (:configured? status))
-      ;; set-embedding-provider! wraps the provider in the shared admission
-      ;; gate, so status names the gate; the mock is its delegate.
+      ;; A host may decorate the provider it hands out (hive-mcp wraps it in
+      ;; its admission gate); the stub host hands the mock out as set.
       (is (some? (:provider status)))
       (is (instance? hive_chroma.test.fixtures.MockEmbedder
-                     (:delegate (chroma/get-embedding-provider)))))))
+                     (let [p (chroma/get-embedding-provider)] (or (:delegate p) p)))))))
 
 (deftest test-mock-embedder-produces-deterministic-vectors
   (testing "Same text produces same embedding"
