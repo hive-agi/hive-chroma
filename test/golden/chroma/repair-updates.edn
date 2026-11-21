@@ -1,0 +1,44 @@
+{:case-0
+ {:out nil,
+  :in
+  ({:id "e1",
+    :metadata {:duration nil, :expires "2027-01-01T00:00:00Z"}}
+   "2026-01-01T00:00:00Z")},
+ :case-1
+ {:out {:duration "medium", :expires "2026-01-31T00:00Z"},
+  :in
+  ({:id "e2",
+    :metadata {:duration "project", :expires "2027-01-01T00:00:00Z"}}
+   "2026-01-01T00:00:00Z")},
+ :case-2
+ {:out {:duration "long", :expires "2026-04-01T00:00Z"},
+  :in
+  ({:id "e1", :metadata {:duration "long-term", :expires ""}}
+   "2026-01-01T00:00:00Z")},
+ :case-3
+ {:out {:duration "long", :expires "2026-04-01T00:00Z"},
+  :in
+  ({:id "e1",
+    :metadata {:duration "long-term", :expires "2027-01-01T00:00:00Z"}}
+   "2026-01-01T00:00:00Z")},
+ :case-4
+ {:out nil,
+  :in
+  ({:id "e2", :metadata {:duration nil, :expires ""}}
+   "2026-01-01T00:00:00Z")},
+ :case-5
+ {:out {:expires "2026-01-31T00:00Z"},
+  :in
+  ({:id "e2", :metadata {:duration "medium", :expires ""}}
+   "2026-01-01T00:00:00Z")},
+ :case-6
+ {:out nil,
+  :in
+  ({:id "e1",
+    :metadata {:duration nil, :expires "2027-01-01T00:00:00Z"}}
+   "2026-01-01T00:00:00Z")},
+ :case-7
+ {:out nil,
+  :in
+  ({:id "e2", :metadata {:duration nil, :expires ""}}
+   "2026-01-01T00:00:00Z")}}
