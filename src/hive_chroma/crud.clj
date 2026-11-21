@@ -175,9 +175,9 @@
 
 (defn- failover-embed!
   "Embed TEXT through ALT, the same-dimension sibling of RESOLVED, after the
-   primary failed with CAUSE. The sibling embeds into its own (stamped)
-   collection, so that collection is guarded first."
-  [entry-id resolved alt text cause]
+   primary failed. The sibling embeds into its own (stamped) collection, so
+   that collection is guarded first. ROUTES is {:entry-id :resolved :alt}."
+  [{:keys [entry-id resolved alt]} text cause]
   (log/warn "Embed via" (:provider-key resolved) "failed for entry" entry-id
             "— failing over to" (:provider-key alt) "(" (ex-message cause) ")")
   (route-collection alt)
@@ -196,7 +196,7 @@
         primary  (attempt-embed provider text)
         alt      (when (r/err? primary) (some-> resolved embedding-service/sibling-failover))]
     (if (and (r/err? primary) alt)
-      (failover-embed! entry-id resolved alt text (:cause primary))
+      (failover-embed! {:entry-id entry-id :resolved resolved :alt alt} text (:cause primary))
       (unwrap-embed! primary ["Embed FAILED (no failover sibling) for entry" entry-id
                               "via" (:provider-key resolved)]))))
 
@@ -249,7 +249,9 @@
 (m/=> route-collection [:=> [:cat Resolved] chroma/Coll])
 (m/=> attempt-embed [:=> [:cat :any [:maybe :string]] EmbedResult])
 (m/=> unwrap-embed! [:=> [:cat EmbedResult [:sequential :any]] [:sequential number?]])
-(m/=> failover-embed! [:=> [:cat :string Resolved Resolved [:maybe :string] :any] [:sequential number?]])
+(m/=> failover-embed! [:=> [:cat [:map [:entry-id :string] [:resolved Resolved] [:alt Resolved]]
+                                [:maybe :string] :any]
+                       [:sequential number?]])
 (m/=> embed-with-failover [:=> [:cat :string Resolved [:maybe :string]] [:sequential number?]])
 (m/=> entry-embedding [:=> [:cat :string :boolean Resolved [:maybe :string]] [:vector number?]])
 
