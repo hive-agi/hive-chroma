@@ -313,57 +313,88 @@
 
 (m/=> get-entry-by-id [:=> [:cat :any] [:maybe Entry]])
 
+(defn- routed-collection
+  "The collection named CN as TYPE's route reads it: the route's own named
+   collection when it names CN, else the default collection."
+  [type cn]
+  (let [resolved (rescue nil (embedding-service/resolve-provider-for-type (or type "note")))]
+    (if (and resolved (= cn (:collection-name resolved)))
+      (conn/get-or-create-named-collection cn (:dimension resolved))
+      (conn/get-or-create-collection))))
+
 (defn read-collections
   "Collections a read of TYPE must visit. With no embedder provider configured
    the type routing names no collection at all, yet writes still land in the
    default one, so an empty routing answer means the default collection, never
-   nothing."
+   nothing. A routing failure is logged and also falls back to the default."
   [type]
-  (let [colls (try (let [coll-names (embedding-service/type->collection-names type)]
-                     (mapv (fn [cn]
-                             (let [resolved (rescue nil (embedding-service/resolve-provider-for-type
-                                                         (or type "note")))]
-                               (if (and resolved (= cn (:collection-name resolved)))
-                                 (conn/get-or-create-named-collection cn (:dimension resolved))
-                                 (conn/get-or-create-collection))))
-                           coll-names))
-                   (catch Exception _ []))]
-    (if (seq colls) (vec (distinct colls)) [(conn/get-or-create-collection)])))
+  (let [result (r/try-effect* :read/routing-failed
+                 (mapv #(routed-collection type %) (embedding-service/type->collection-names type)))]
+    (when (r/err? result)
+      (log/warn "Collection routing failed for type" type "- reading the default collection:"
+                (:message result)))
+    (if (seq (:ok result))
+      (vec (distinct (:ok result)))
+      [(conn/get-or-create-collection)])))
 
 (m/=> read-collections [:=> [:cat [:maybe [:or :string :keyword]]] [:vector {:min 1} chroma/Coll]])
+
+(def QueryFilters
+  "The metadata filters a query-entries read applies."
+  [:map
+   [:type {:optional true} [:maybe [:or :string :keyword]]]
+   [:project-id {:optional true} [:maybe :string]]
+   [:project-ids {:optional true} [:maybe [:sequential :any]]]
+   [:tags {:optional true} [:maybe [:sequential :any]]]
+   [:exclude-tags {:optional true} [:maybe [:sequential :any]]]])
+
+(def Where
+  "A Chroma metadata where clause, nil for no filter."
+  [:maybe :map])
+
+(defn query-where
+  "The Chroma where clause for FILTERS: field equality for type and project,
+   $contains / $not_contains per included / excluded tag, joined by $and when
+   more than one field is constrained by tags. Pure."
+  [{:keys [type project-id project-ids tags exclude-tags]}]
+  (let [base  (cond-> {}
+                type        (assoc :type type)
+                project-ids (assoc :project-id {:$in (vec project-ids)})
+                (and project-id (not project-ids)) (assoc :project-id project-id))
+        extra (concat (map (fn [tag] {:tags {:$contains tag}}) tags)
+                      (map (fn [tag] {:tags {:$not_contains tag}}) exclude-tags))]
+    (cond
+      (seq extra) {:$and (into (mapv (fn [[k v]] {k v}) base) extra)}
+      (seq base)  base
+      :else       nil)))
+
+(defn- read-rows
+  "Rows of COLL matching the vendor GET-OPTS, as a Result. A collection that
+   cannot be read is logged and contributes no rows, so one bad collection
+   does not fail a fan-out read; the failure is never silent."
+  [coll get-opts]
+  (let [result (r/try-effect* :read/failed
+                 (gate/deref-read (apply chroma/get coll (mapcat identity get-opts))))]
+    (when (r/err? result)
+      (log/warn "Chroma read failed for collection" (:name coll) ":" (:message result)))
+    result))
+
+(defn- rows-across
+  "Every row matching GET-OPTS across COLLS."
+  [colls get-opts]
+  (mapcat #(:ok (read-rows % get-opts) []) colls))
 
 (defn query-entries
   "Query memory entries from Chroma with filtering.
    :exclude-tags — seq of tags to exclude via $not_contains."
-  [& {:keys [type project-id project-ids tags exclude-tags limit include-expired?]
-      :or {limit 100 include-expired? false}}]
+  [& {:keys [type limit include-expired?] :or {limit 100 include-expired? false} :as opts}]
   (emb/require-embedding!)
-  (let [colls (read-collections type)
-        base-clause (cond-> {}
-                      type (assoc :type type)
-                      project-ids (assoc :project-id {:$in (vec project-ids)})
-                      (and project-id (not project-ids)) (assoc :project-id project-id))
-        tag-conditions (when (seq tags)
-                         (mapv (fn [tag] {:tags {:$contains tag}}) tags))
-        exclude-conditions (when (seq exclude-tags)
-                             (mapv (fn [tag] {:tags {:$not_contains tag}}) exclude-tags))
-        all-extra (concat tag-conditions exclude-conditions)
-        where (cond
-                (seq all-extra)
-                (let [base-conditions (mapv (fn [[k v]] {k v}) base-clause)]
-                  {:$and (into base-conditions all-extra)})
-                (seq base-clause) base-clause
-                :else nil)
-        fetch-limit (if include-expired? limit (+ limit 50))
-        ;; PERF: include only :metadatas — see docs/carto-tag-query-perf.md
-        results (mapcat (fn [coll]
-                          (try (gate/deref-read (chroma/get coll
-                                                           :where where
-                                                           :include #{:metadatas}
-                                                           :limit fetch-limit))
-                               (catch Exception _ [])))
-                        colls)
-        entries (map h/metadata->entry results)
+  (let [;; PERF: include only :metadatas — see docs/carto-tag-query-perf.md
+        rows    (rows-across (read-collections type)
+                             {:where   (query-where opts)
+                              :include #{:metadatas}
+                              :limit   (if include-expired? limit (+ limit 50))})
+        entries (map h/metadata->entry rows)
         {expired true live false} (group-by #(boolean (h/expired? %)) entries)]
     (when-not include-expired?
       (evict-expired-async! (mapv :id expired)))
@@ -371,6 +402,19 @@
          (sort-by :created #(compare %2 %1))
          (take limit)
          vec)))
+
+(def ^:private GetOpts
+  "Vendor `chroma/get` keyword options."
+  [:map [:where {:optional true} Where] [:include {:optional true} :any]
+   [:limit {:optional true} pos-int?]])
+
+(def ^:private ReadResult
+  [:or [:map [:ok [:sequential :map]]] [:map [:error :keyword]]])
+
+(m/=> query-where [:=> [:cat QueryFilters] Where])
+(m/=> read-rows [:=> [:cat chroma/Coll GetOpts] ReadResult])
+(m/=> rows-across [:=> [:cat [:sequential chroma/Coll] GetOpts] [:sequential :map]])
+(m/=> routed-collection [:=> [:cat [:maybe [:or :string :keyword]] :string] chroma/Coll])
 
 (m/=> query-entries [:=> [:cat [:* :any]] [:vector Entry]])
 
@@ -448,21 +492,15 @@
    falling off the query window."
   [type content-hash & {:keys [project-id]}]
   (emb/require-embedding!)
-  (let [colls (read-collections type)
-        base-clause (cond-> {:content-hash content-hash}
+  (let [base-clause (cond-> {:content-hash content-hash}
                       type       (assoc :type type)
                       project-id (assoc :project-id project-id))
         where (if (< 1 (count base-clause))
                 {:$and (mapv (fn [[k v]] {k v}) base-clause)}
-                base-clause)
-        results (mapcat (fn [coll]
-                          (try (gate/deref-read (chroma/get coll
-                                                            :where where
-                                                            :include #{:metadatas}
-                                                            :limit 1))
-                               (catch Exception _ [])))
-                        colls)]
-    (first (map h/metadata->entry results))))
+                base-clause)]
+    (some-> (first (rows-across (read-collections type)
+                                {:where where :include #{:metadatas} :limit 1}))
+            h/metadata->entry)))
 
 (m/=> find-duplicate [:=> [:cat [:maybe [:or :string :keyword]] [:maybe :string] [:* :any]] [:maybe Entry]])
 
