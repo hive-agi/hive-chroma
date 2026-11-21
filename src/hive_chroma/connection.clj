@@ -1,9 +1,9 @@
-(ns hive-mcp.chroma.connection
+(ns hive-chroma.connection
   "Chroma connection configuration, collection management, and health status."
-  (:require [hive-mcp.chroma.client :as chroma]
-            [hive-mcp.embeddings.active :as emb]
-            [hive-mcp.embeddings.service :as embedding-service]
-            [hive-mcp.embeddings.space :as space]
+  (:require [hive-chroma.client :as chroma]
+            [hive-chroma.host :as emb]
+            [hive-chroma.host :as embedding-service]
+            [hive-chroma.host :as space]
             [taoensso.timbre :as log] [hive-dsl.result :refer [rescue]]
             [malli.core :as m]))
 
@@ -166,6 +166,47 @@
 
 (m/=> reset-collection-cache! [:=> [:cat] [:map-of {:max 0} :any :any]])
 
+(defn collection-names
+  "Every collection this process could legitimately read: the default
+   (unnamed) collection plus every collection a configured provider's dimension
+   writes to. `extra` adds names the caller knows about (legacy collections a
+   scan visits). Config only: it opens nothing and creates nothing."
+  ([] (collection-names nil))
+  ([extra]
+   (vec (distinct (concat [(:collection-name @config)]
+                          (rescue [] (embedding-service/all-collection-names))
+                          extra)))))
+
+(defn collection-space-audit
+  "Provenance of every collection this process could read, as data: one row per
+   collection that EXISTS, from `space/audit`. Never creates a collection and
+   never throws on a mismatch: this is the listing an operator uses to find the
+   collections that need isolating or re-embedding, which is why a divergent one
+   is reported :diverged instead of refused.
+
+   Opts:
+     :names - extra collection names to include (legacy/sibling ones)
+     :space - the EmbeddingSpace a caller is about to use; with it each row also
+              carries :expected-id and the keys a divergent collection differs on."
+  ([] (collection-space-audit nil))
+  ([opts]
+   (let [expected (:space opts)]
+     (vec (keep (fn [n]
+                  (when-let [coll (try-get-collection n)]
+                    (space/audit n expected (:metadata coll))))
+                (collection-names (:names opts)))))))
+
+(m/=> collection-names [:function [:=> [:cat] [:vector :string]]
+                        [:=> [:cat [:maybe [:sequential :string]]] [:vector :string]]])
+
+(m/=> collection-space-audit
+      [:function
+       [:=> [:cat] [:sequential space/AuditRow]]
+       [:=> [:cat [:maybe [:map
+                           [:names {:optional true} [:maybe [:sequential :string]]]
+                           [:space {:optional true} [:maybe [:map-of :keyword :any]]]]]]
+        [:sequential space/AuditRow]]])
+
 (defn status
   "Get Chroma integration status."
   []
@@ -204,51 +245,3 @@
                 [:impl :keyword]
                 [:model :string]
                 [:host {:optional true} :string]]]])
-
-(defn reinitialize-embeddings!
-  "Fix hot-reload protocol mismatch by reloading namespaces and reinitializing."
-  [& {:keys [provider-type] :or {provider-type :ollama}}]
-  (log/info "Reinitializing embeddings due to protocol mismatch...")
-
-  (remove-ns 'hive-mcp.embeddings.ollama)
-  (remove-ns 'hive-mcp.embeddings.openai)
-  (remove-ns 'hive-mcp.embeddings.openrouter)
-  (remove-ns 'hive-mcp.embeddings.registry)
-
-  (require 'hive-mcp.embeddings.ollama :reload)
-  (require 'hive-mcp.embeddings.openai :reload)
-  (require 'hive-mcp.embeddings.openrouter :reload)
-  (require 'hive-mcp.embeddings.registry :reload)
-
-  (reset-collection-cache!)
-  (emb/reset-embedding-provider!)
-
-  (let [registry-init (resolve 'hive-mcp.embeddings.registry/init!)
-        registry-clear (resolve 'hive-mcp.embeddings.registry/clear-cache!)]
-    (registry-clear)
-    (registry-init))
-
-  (let [config-value (requiring-resolve 'hive-mcp.config.core/get-config-value)
-        opts         (if-let [model (config-value (str "embeddings." (name provider-type) ".model"))]
-                       {:model model}
-                       {})
-        provider (case provider-type
-                   :ollama ((resolve 'hive-mcp.embeddings.ollama/->provider) opts)
-                   :openai ((resolve 'hive-mcp.embeddings.openai/->provider) opts)
-                   :openrouter ((resolve 'hive-mcp.embeddings.openrouter/->provider) opts))]
-    (emb/set-embedding-provider! provider
-                                 (provider-spec provider-type (:model opts) provider))
-
-    (let [fixed? (satisfies? emb/EmbeddingProvider provider)]
-      (if fixed?
-        (log/info "Embeddings reinitialized successfully")
-        (log/error "Reinitialization failed - protocol still mismatched"))
-      {:fixed? fixed?
-       :provider-type provider-type
-       :dimension (when fixed? (emb/embedding-dimension provider))})))
-
-(m/=> reinitialize-embeddings! [:=> [:cat [:* :any]]
-                                [:map
-                                 [:fixed? :boolean]
-                                 [:provider-type [:enum :ollama :openai :openrouter]]
-                                 [:dimension [:maybe pos-int?]]]])

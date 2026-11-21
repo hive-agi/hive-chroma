@@ -1,17 +1,17 @@
-(ns hive-mcp.chroma.seam-contract-test
+(ns hive-chroma.seam-contract-test
   "The Chroma seam namespaces under instrumentation: the transport setter,
    the connection config/status/cache, the read/write gates and the
    IVectorCollectionStore adapter, all over the in-memory transport."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.connection :as conn]
-            [hive-mcp.chroma.gate :as gate]
-            [hive-mcp.chroma.vector-store :as vs]
-            [hive-mcp.config.test-support :as cfg]
-            [hive-mcp.embeddings.active :as active]
-            [hive-mcp.protocols.vector :as vp]
-            [hive-mcp.test-fixtures :as fixtures]
-            [hive-mcp.test.stub.chroma-transport :as transport]
+            [hive-chroma.client :as client]
+            [hive-chroma.connection :as conn]
+            [hive-chroma.gate :as gate]
+            [hive-chroma.vector-store :as vs]
+            [hive-chroma.test.fixtures :as cfg]
+            [hive-chroma.test.host :as active]
+            [hive-spi.vector.ports :as vp]
+            [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.stub.transport :as transport]
             [hive-test.golden :refer [deftest-golden]]
             [malli.core :as m]
             [malli.generator :as mg]

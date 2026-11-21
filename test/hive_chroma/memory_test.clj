@@ -1,26 +1,26 @@
-(ns hive-mcp.memory-chroma-test
-  "The Chroma memory adapter (hive-mcp.chroma.core) end to end through its
+(ns hive-chroma.memory-test
+  "The Chroma memory adapter (hive-chroma.core) end to end through its
    transport seam: CRUD, semantic search, durations, scope tags, dedup,
    collection stats, error paths and the document format.
 
    DEFAULT TIER: the transport is the in-memory IChromaTransport
-   (hive-mcp.test.stub.chroma-transport), so no Chroma server is reached. The
+   (hive-chroma.stub.transport), so no Chroma server is reached. The
    adapter code above the seam is the production code, unchanged.
 
    The SAME tests run against a real Chroma in the e2e tier
-   (test-e2e/hive_mcp/e2e/chroma_test.clj binds *backend* to a throwaway
+   (test-e2e/hive_chroma/e2e_test.clj binds *backend* to a throwaway
    container), which is what holds the stub to the real provider's behaviour
    (axiom 20260729111910-400b5763). Before 2026-11-11 every test here was
    ^:integration and probed localhost:8000: skipped in CI, and on a dev host it
    wrote test entries into whatever Chroma answered there."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.string :as str]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.connection :as chroma-conn]
-            [hive-mcp.chroma.core :as chroma]
-            [hive-mcp.config.test-support :as cfg]
-            [hive-mcp.test-fixtures :as fixtures]
-            [hive-mcp.test.stub.chroma-transport :as transport]))
+            [hive-chroma.client :as client]
+            [hive-chroma.connection :as chroma-conn]
+            [hive-chroma.core :as chroma]
+            [hive-chroma.test.fixtures :as cfg]
+            [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.stub.transport :as transport]))
 
 ;; =============================================================================
 ;; Test Fixtures and Helpers
@@ -102,11 +102,11 @@
   (testing "Status returns provider info"
     (let [status (chroma/status)]
       (is (:configured? status))
-      ;; set-embedding-provider! wraps the provider in the shared admission
-      ;; gate, so status names the gate; the mock is its delegate.
+      ;; A host may decorate the provider it hands out (hive-mcp wraps it in
+      ;; its admission gate); the stub host hands the mock out as set.
       (is (some? (:provider status)))
-      (is (instance? hive_mcp.test_fixtures.MockEmbedder
-                     (:delegate (chroma/get-embedding-provider)))))))
+      (is (instance? hive_chroma.test.fixtures.MockEmbedder
+                     (let [p (chroma/get-embedding-provider)] (or (:delegate p) p)))))))
 
 (deftest test-mock-embedder-produces-deterministic-vectors
   (testing "Same text produces same embedding"

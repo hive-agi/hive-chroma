@@ -1,5 +1,5 @@
-(ns hive-mcp.chroma.contract-coverage-test
-  "Gate: every public fn under src/hive_mcp/chroma carries an `m/=>` contract
+(ns hive-chroma.contract-coverage-test
+  "Gate: every public fn under src/hive_chroma carries an `m/=>` contract
    or a REASONED exemption, and no exemption is stale."
   (:require [hive-schemas.coverage :refer [deftest-contract-coverage]]))
 
@@ -12,5 +12,5 @@
 ;; those aliases are covered by the target's contract; the core `defn`s that
 ;; branch on the active store carry their own.
 (deftest-contract-coverage chroma-contracts-gate
-  {:paths ["src/hive_mcp/chroma"]
+  {:paths ["src/hive_chroma"]
    :exempt {}})

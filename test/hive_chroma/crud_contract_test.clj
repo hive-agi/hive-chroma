@@ -1,16 +1,16 @@
-(ns hive-mcp.chroma.crud-contract-test
+(ns hive-chroma.crud-contract-test
   "chroma.crud under instrumentation over the in-memory transport: a CRUD
    round trip pinned as a golden, both arms of collection-stats, and the
    staleness field mapping as a schema trifecta."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-mcp.chroma.client :as client]
-            [hive-mcp.chroma.connection :as conn]
-            [hive-mcp.chroma.crud :as crud]
-            [hive-mcp.chroma.helpers :as h]
-            [hive-mcp.config.test-support :as cfg]
-            [hive-mcp.embeddings.active :as active]
-            [hive-mcp.test-fixtures :as fixtures]
-            [hive-mcp.test.stub.chroma-transport :as transport]
+            [hive-chroma.client :as client]
+            [hive-chroma.connection :as conn]
+            [hive-chroma.crud :as crud]
+            [hive-chroma.helpers :as h]
+            [hive-chroma.test.fixtures :as cfg]
+            [hive-chroma.test.host :as active]
+            [hive-chroma.test.fixtures :as fixtures]
+            [hive-chroma.stub.transport :as transport]
             [hive-schemas.test :refer [deftrifecta-from-schema]]
             [hive-test.golden :refer [deftest-golden]]
             [malli.core :as m]
@@ -45,7 +45,7 @@
 (use-fixtures :each chroma-without-server)
 
 (deftrifecta-from-schema staleness-mapping
-  hive-mcp.chroma.crud/staleness-updates
+  hive-chroma.crud/staleness-updates
   {:in [:map
         [:staleness-alpha {:optional true} [:int {:min 0 :max 9}]]
         [:alpha {:optional true} [:int {:min 0 :max 9}]]
@@ -95,7 +95,7 @@
   (round-trip))
 
 (deftest collection-stats-arms
-  (let [out-schema (-> (m/function-schemas) (get 'hive-mcp.chroma.crud)
+  (let [out-schema (-> (m/function-schemas) (get 'hive-chroma.crud)
                        (get 'collection-stats) :schema m/form last)
         [ok-arm err-arm] (m/children (m/schema out-schema))]
     (testing "a reachable store answers counts"
