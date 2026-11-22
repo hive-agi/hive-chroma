@@ -7,14 +7,10 @@
             [hive-chroma.connection :as conn]
             [hive-chroma.crud :as crud]
             [hive-chroma.helpers :as h]
-            [hive-chroma.test.fixtures :as cfg]
-            [hive-chroma.test.host :as active]
             [hive-chroma.test.fixtures :as fixtures]
-            [hive-chroma.stub.transport :as transport]
             [hive-schemas.test :refer [deftrifecta-from-schema]]
             [hive-test.golden :refer [deftest-golden]]
-            [malli.core :as m]
-            [malli.instrument :as mi]))
+            [malli.core :as m]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -27,22 +23,7 @@
     #'crud/delete-entry! #'crud/find-duplicate #'crud/collection-stats
     #'crud/delete-all-entries!})
 
-(defn- chroma-without-server [f]
-  (let [prior-transport (client/transport)
-        prior-provider  (active/get-embedding-provider)]
-    (client/set-transport! (transport/->transport))
-    (active/set-embedding-provider! (fixtures/->MockEmbedder 16))
-    (conn/reset-collection-cache!)
-    (mi/instrument! {:filters [(mi/-filter-var contracted)]})
-    (try
-      (cfg/with-config {:embedder {:no-embed-types #{} :routes {}}} (f))
-      (finally
-        (mi/unstrument! {:filters [(mi/-filter-var contracted)]})
-        (conn/reset-collection-cache!)
-        (client/set-transport! prior-transport)
-        (active/set-embedding-provider! prior-provider)))))
-
-(use-fixtures :each chroma-without-server)
+(use-fixtures :each (fixtures/chroma-without-server {:instrument contracted}))
 
 (deftrifecta-from-schema staleness-mapping
   hive-chroma.crud/staleness-updates

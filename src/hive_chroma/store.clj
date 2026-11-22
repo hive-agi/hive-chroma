@@ -26,7 +26,7 @@
 ;; Pure Calculations (extracted to lower per-fn CC)
 ;; =========================================================================
 
-(def capabilities
+(def ^:private capabilities
   "What callers may rely on beyond the IMemoryStore port, declared under
    :capabilities in store-status (the hive-spi.memory.decorate contract).
 
@@ -111,7 +111,7 @@
       (mapv #(select-keys % ks) entries))
     entries))
 
-(defn hit->entry
+(defn- hit->entry
   "A Chroma search hit as the entry map the IMemoryStore port promises.
    The vendor answers {:id :document :metadata :distance ...} with every entry
    field (:type, :project-id, :tags, ...) nested under :metadata; the port's

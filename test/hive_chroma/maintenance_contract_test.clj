@@ -2,18 +2,12 @@
   "Expiry cleanup and the expiring-soon window under instrumentation over the
    in-memory transport: entries are seeded with known durations and expiry
    instants, and the outcome is pinned as a golden."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-chroma.client :as client]
-            [hive-chroma.connection :as conn]
+  (:require [clojure.test :refer [deftest is use-fixtures]]
             [hive-chroma.crud :as crud]
             [hive-chroma.maintenance :as maint]
-            [hive-chroma.test.fixtures :as cfg]
-            [hive-chroma.test.host :as active]
             [hive-chroma.test.fixtures :as fixtures]
-            [hive-chroma.stub.transport :as transport]
             [hive-test.golden :refer [deftest-golden]]
-            [malli.core :as m]
-            [malli.instrument :as mi]))
+            [malli.core :as m]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -22,22 +16,7 @@
 (def ^:private contracted
   #{#'maint/cleanup-expired! #'maint/entries-expiring-soon})
 
-(defn- chroma-without-server [f]
-  (let [prior-transport (client/transport)
-        prior-provider  (active/get-embedding-provider)]
-    (client/set-transport! (transport/->transport))
-    (active/set-embedding-provider! (fixtures/->MockEmbedder 16))
-    (conn/reset-collection-cache!)
-    (mi/instrument! {:filters [(mi/-filter-var contracted)]})
-    (try
-      (cfg/with-config {:embedder {:no-embed-types #{} :routes {}}} (f))
-      (finally
-        (mi/unstrument! {:filters [(mi/-filter-var contracted)]})
-        (conn/reset-collection-cache!)
-        (client/set-transport! prior-transport)
-        (active/set-embedding-provider! prior-provider)))))
-
-(use-fixtures :each chroma-without-server)
+(use-fixtures :each (fixtures/chroma-without-server {:instrument contracted}))
 
 (defn- in-days [n] (str (.plusDays (java.time.ZonedDateTime/now) n)))
 

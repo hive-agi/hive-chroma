@@ -11,8 +11,7 @@
    - Removing deref-gate timeout → test detects hang (P1, P2)
    - Removing semaphore acquire → test detects over-concurrency (P3)
    - Removing gate entirely → golden shape test fails (G1)"
-  (:require [clojure.test :refer [deftest testing is use-fixtures]]
-            [clojure.test.check :as tc]
+  (:require [clojure.test :refer [deftest testing is]]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [clojure.test.check.clojure-test :refer [defspec]]
@@ -105,26 +104,30 @@
 (defspec p3-concurrency-bounded 30
   (prop/for-all [permits (gen/choose 1 4)
                  n-workers (gen/choose 2 12)]
-    (let [gate (g/gate {:permits permits :timeout-ms 5000 :name "p3-test"})
-          peak (atom 0)
-          active (atom 0)]
-      ;; Launch n-workers all trying to enter the gate
-      (let [futures (doall
-                      (for [_ (range n-workers)]
-                        (future
-                          (try
-                            (g/gate-run! gate
-                              (fn []
-                                (let [cur (swap! active inc)]
-                                  (swap! peak max cur)
-                                  (Thread/sleep 10)
-                                  (swap! active dec))))
-                            (catch Exception _ nil)))))]
-        (doseq [f futures]
-          (when (= ::pending (deref f 10000 ::pending))
-            (future-cancel f)))
-        ;; Peak concurrent should never exceed permits
-        (<= @peak permits)))))
+    ;; Launch n-workers all trying to enter the gate. gate-run answers a
+    ;; Result (an acquire timeout is an err, never a throw), so no worker
+    ;; swallows its outcome.
+    (let [gate    (g/gate {:permits permits :timeout-ms 5000 :name "p3-test"})
+          peak    (atom 0)
+          active  (atom 0)
+          futures (doall
+                    (for [_ (range n-workers)]
+                      (future
+                        (g/gate-run gate
+                          (fn []
+                            (let [cur (swap! active inc)]
+                              (swap! peak max cur)
+                              (Thread/sleep 10)
+                              (swap! active dec)))))))
+          results (mapv (fn [f]
+                          (let [v (deref f 10000 ::pending)]
+                            (when (= ::pending v) (future-cancel f))
+                            v))
+                        futures)]
+      ;; Every worker answered a Result, and peak concurrency never
+      ;; exceeded the permits
+      (and (every? #(or (r/ok? %) (r/err? %)) results)
+           (<= @peak permits)))))
 
 ;; =============================================================================
 ;; P4: Fairness — with-gate and gate-run! produce same result for pure fns

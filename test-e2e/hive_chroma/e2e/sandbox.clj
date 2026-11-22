@@ -4,7 +4,8 @@
    never points at the operator's live instance, even by default
    (convention 20261111105238-0ceaa524). Carried here so the e2e tier needs
    no host on its classpath."
-  (:require [clojure.java.shell :as sh])
+  (:require [clojure.java.shell :as sh]
+            [hive-dsl.result :as r])
   (:import [java.net ServerSocket InetAddress]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -24,14 +25,21 @@
        (catch Exception _no-docker-binary false)))
 
 (defn wait-until
-  "Poll (ready?) every 200 ms until it is truthy or ms elapse; answer it."
+  "Poll (ready?) every 200 ms until it is truthy or ms elapse. Answers
+   {:ok value} on the first truthy probe, else the err Result of the last
+   probe that threw ({:error :e2e/not-ready :class :message}), or
+   {:error :e2e/not-ready} when every probe answered falsey. A probe that
+   throws is the container still starting, so it is retried, never swallowed:
+   the last failure is what a never-ready sandbox reports."
   [ready? ms]
   (let [deadline (+ (System/currentTimeMillis) ms)]
-    (loop []
-      (or (try (ready?) (catch Exception _not-ready-yet nil))
-          (when (< (System/currentTimeMillis) deadline)
-            (Thread/sleep 200)
-            (recur))))))
+    (loop [last-err (r/err :e2e/not-ready)]
+      (let [probe (r/try-effect* :e2e/not-ready (ready?))]
+        (cond
+          (and (r/ok? probe) (:ok probe))         probe
+          (>= (System/currentTimeMillis) deadline) (if (r/err? probe) probe last-err)
+          :else (do (Thread/sleep 200)
+                    (recur (if (r/err? probe) probe last-err))))))))
 
 (defn with-container
   "Run IMAGE (args ARGS) as a throwaway container publishing CONTAINER-PORT
@@ -51,7 +59,9 @@
                                       image args)]
         (when-not (zero? exit)
           (throw (ex-info "e2e sandbox: docker run failed" {:image image :err err}))))
-      (when-not (wait-until #(ready? port) ready-ms)
-        (throw (ex-info "e2e sandbox: container never became ready" {:image image :port port})))
+      (let [ready (wait-until #(ready? port) ready-ms)]
+        (when (r/err? ready)
+          (throw (ex-info "e2e sandbox: container never became ready"
+                          {:image image :port port :last-probe ready}))))
       (f port)
       (finally (sh/sh "docker" "rm" "-f" cname)))))

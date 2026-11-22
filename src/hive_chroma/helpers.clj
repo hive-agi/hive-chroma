@@ -21,7 +21,7 @@
   [s]
   (and s (or (str/starts-with? s "{") (str/starts-with? s "["))))
 
-(defn try-parse-json
+(defn- try-parse-json
   "Parse JSON string, return original on failure."
   [s]
   (if (json-string? s)

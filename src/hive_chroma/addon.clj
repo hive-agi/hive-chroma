@@ -38,9 +38,9 @@
 ;;
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 
-(def addon-id "hive.chroma")
+(def ^:private addon-id "hive.chroma")
 
-(def Config
+(def ^:private Config
   "What initialize! reads; every key optional."
   [:map
    [:host {:optional true} :string]

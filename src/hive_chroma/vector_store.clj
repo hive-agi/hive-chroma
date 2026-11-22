@@ -128,7 +128,7 @@
    "delete"            -delete*
    "update"            -update*})
 
-(defn impl-map
+(defn- impl-map
   "Pure: the `extend` map for a protocol whose method keys are `sig-keys`.
    Each key, `:-get-collection` or `:get-collection`, maps to the impl of that
    method name; a key with no impl is absent."
@@ -142,7 +142,7 @@
 
 (m/=> impl-map [:=> [:cat [:sequential :keyword]] [:map-of :keyword ifn?]])
 
-(defn install!
+(defn- install!
   "Extend the record onto PROTO, keyed by the protocol's OWN method keys so a
    renamed port method cannot silently go unimplemented. Throws when a port
    method has no implementation here. Returns PROTO."

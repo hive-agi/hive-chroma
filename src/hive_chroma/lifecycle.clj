@@ -19,7 +19,7 @@
             [malli.core :as m]
             [hive-spi.log.ports :as log]))
 
-(defn chroma-store
+(defn- chroma-store
   "The Chroma store this process registered, or nil."
   []
   (let [stores (mem-reg/registered-stores)]
