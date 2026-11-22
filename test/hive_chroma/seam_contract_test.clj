@@ -7,15 +7,12 @@
             [hive-chroma.connection :as conn]
             [hive-chroma.gate :as gate]
             [hive-chroma.vector-store :as vs]
-            [hive-chroma.test.fixtures :as cfg]
-            [hive-chroma.test.host :as active]
             [hive-spi.vector.ports :as vp]
             [hive-chroma.test.fixtures :as fixtures]
             [hive-chroma.stub.transport :as transport]
             [hive-test.golden :refer [deftest-golden]]
             [malli.core :as m]
-            [malli.generator :as mg]
-            [malli.instrument :as mi]))
+            [malli.generator :as mg]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -31,22 +28,7 @@
     #'gate/deref-read #'gate/deref-write #'gate/gate-stats
     #'vs/chroma-vector-store})
 
-(defn- chroma-without-server [f]
-  (let [prior-transport (client/transport)
-        prior-provider  (active/get-embedding-provider)]
-    (client/set-transport! (transport/->transport))
-    (active/set-embedding-provider! (fixtures/->MockEmbedder 16))
-    (conn/reset-collection-cache!)
-    (mi/instrument! {:filters [(mi/-filter-var contracted)]})
-    (try
-      (cfg/with-config {:embedder {:no-embed-types #{} :routes {}}} (f))
-      (finally
-        (mi/unstrument! {:filters [(mi/-filter-var contracted)]})
-        (conn/reset-collection-cache!)
-        (client/set-transport! prior-transport)
-        (active/set-embedding-provider! prior-provider)))))
-
-(use-fixtures :each chroma-without-server)
+(use-fixtures :each (fixtures/chroma-without-server {:instrument contracted}))
 
 (deftest seam-schemas-generate
   (doseq [s [client/Transport client/Coll client/Records conn/Config conn/Status

@@ -5,13 +5,9 @@
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [hive-addon.protocol :as addon-proto]
             [hive-chroma.addon :as addon]
-            [hive-chroma.client :as client]
-            [hive-chroma.connection :as conn]
             [hive-chroma.store :as store]
-            [hive-chroma.stub.transport :as transport]
             [hive-chroma.test.fixtures :as fixtures]
             [hive-chroma.test.registry-isolation :as isolation]
-            [hive-chroma.test.host :as active]
             [hive-chroma.host :as host]
             [hive-spi.memory.registry :as mem-reg]
             [hive-spi.vector.host-services :as hs]))
@@ -20,25 +16,9 @@
 ;;
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 
-(defn- chroma-without-server [f]
-  (let [prior-transport (client/transport)
-        prior-provider  (active/get-embedding-provider)
-        ;; initialize! calls conn/configure!, a process-wide merge: put the
-        ;; prior endpoint back or every later suite sees this test's host.
-        prior-config    (select-keys (conn/get-config) [:host :port :collection-name])]
-    (client/set-transport! (transport/->transport))
-    (active/set-embedding-provider! (fixtures/->MockEmbedder 8))
-    (conn/reset-collection-cache!)
-    (try
-      (isolation/with-restored-store-registry
-        (fn [] (fixtures/with-config {:embedder {:no-embed-types #{} :routes {}}} (f))))
-      (finally
-        (conn/configure! prior-config)
-        (conn/reset-collection-cache!)
-        (client/set-transport! prior-transport)
-        (active/set-embedding-provider! prior-provider)))))
-
-(use-fixtures :each chroma-without-server)
+(use-fixtures :each
+  (fixtures/chroma-without-server {:embedder (fixtures/->MockEmbedder 8)
+                                   :wrap     isolation/with-restored-store-registry}))
 
 (deftest resolve-config-precedence
   (testing "explicit > env > defaults"

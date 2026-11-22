@@ -5,14 +5,11 @@
    transport are installed by the fixture and restored after it."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-chroma.client :as client]
-            [hive-chroma.connection :as conn]
             [hive-chroma.crud :as crud]
             [hive-chroma.helpers :as h]
             [hive-chroma.host :as host]
             [hive-chroma.maintenance :as maintenance]
             [hive-chroma.search :as search]
-            [hive-chroma.stub.transport :as transport]
             [hive-chroma.test.fixtures :as fixtures]
             [hive-chroma.test.host :as stub-host]
             [hive-schemas.test :refer [deftrifecta-from-schema]]
@@ -24,22 +21,7 @@
 ;;
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 
-(defn- stub-ports [f]
-  (let [prior-t (client/transport)
-        prior-p (stub-host/get-embedding-provider)]
-    (client/set-transport! (transport/->transport))
-    (stub-host/set-embedding-provider! (fixtures/->MockEmbedder 8))
-    (conn/reset-collection-cache!)
-    (try
-      (fixtures/with-config {:embedder {:no-embed-types #{} :routes {}}} (f))
-      (finally
-        (conn/reset-collection-cache!)
-        (client/set-transport! prior-t)
-        (if prior-p
-          (stub-host/set-embedding-provider! prior-p)
-          (stub-host/reset-embedding-provider!))))))
-
-(use-fixtures :each stub-ports)
+(use-fixtures :each (fixtures/chroma-without-server {:embedder (fixtures/->MockEmbedder 8)}))
 
 ;; =============================================================================
 ;; crud/query-where: filters -> Chroma where clause

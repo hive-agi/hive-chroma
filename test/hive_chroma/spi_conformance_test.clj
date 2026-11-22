@@ -18,13 +18,9 @@
             [hive-spi.memory.conformance :refer [defconformance]]
             [hive-test.trifecta :refer [deftrifecta]]
             [hive-chroma.client :as client]
-            [hive-chroma.connection :as conn]
             [hive-chroma.crud :as crud]
-            [hive-chroma.test.fixtures :as cfg]
-            [hive-chroma.test.host :as active]
             [hive-chroma.store :as chroma-store]
             [hive-chroma.test.fixtures :as fixtures]
-            [hive-chroma.stub.transport :as transport]
             [clojure.string]
             [hive-chroma.test.memory-port :as mem-proto]
             [hive-spi.memory.ports :as ports]
@@ -34,11 +30,6 @@
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
-
-(def ^:private test-config
-  "No embedder providers configured: every type falls back to the one global
-   (mock) provider and its default collection."
-  {:embedder {:no-embed-types #{} :routes {}}})
 
 (defrecord LetterEmbedder []
   ;; A similarity-preserving stub: the unit vector of a text's letter counts
@@ -59,24 +50,10 @@
     (mapv #(emb-ports/embed-text this %) texts))
   (embedding-dimension [_] 27))
 
-(defn chroma-without-server
-  "Fixture: a fresh in-memory transport, a similarity-preserving stub
-   embedder (LetterEmbedder) and a static config for each test, restoring the
-   prior transport and provider afterwards."
-  [f]
-  (let [prior-transport (client/transport)
-        prior-provider  (active/get-embedding-provider)]
-    (client/set-transport! (transport/->transport))
-    (active/set-embedding-provider! (->LetterEmbedder))
-    (conn/reset-collection-cache!)
-    (try
-      (cfg/with-config test-config (f))
-      (finally
-        (conn/reset-collection-cache!)
-        (client/set-transport! prior-transport)
-        (active/set-embedding-provider! prior-provider)))))
-
-(use-fixtures :each chroma-without-server)
+(use-fixtures :each
+  ;; The shared fixture's default config routes nothing: every type falls back
+  ;; to the one global (letter) provider and its default collection.
+  (fixtures/chroma-without-server {:embedder (->LetterEmbedder)}))
 
 (defconformance chroma-spi
   #(chroma-store/create-store)

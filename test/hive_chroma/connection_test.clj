@@ -14,29 +14,19 @@
 ;;
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 
-(defn- connection-caches []
-  {:collection @@#'conn/collection-cache
-   :named @@#'conn/named-collection-cache
-   :legacy-warned @@#'conn/legacy-warned})
-
-(defn- restore-connection-caches! [caches]
-  (reset! @#'conn/collection-cache (:collection caches))
-  (reset! @#'conn/named-collection-cache (:named caches))
-  (reset! @#'conn/legacy-warned (:legacy-warned caches)))
-
 (defn- own-ports [f]
   (let [prior-t      (client/transport)
         prior-p      (active/get-embedding-provider)
         prior-spec   (active/get-embedding-provider-spec)
         prior-cfg    (conn/get-config)
-        prior-caches (connection-caches)]
+        prior-caches (fixtures/connection-caches)]
     (client/set-transport! (transport/->transport))
     (active/set-digest-resolver! (fn [_] nil))
     (conn/reset-collection-cache!)
     (try (f)
          (finally
            (conn/configure! (select-keys prior-cfg [:host :port :collection-name]))
-           (restore-connection-caches! prior-caches)
+           (fixtures/restore-connection-caches! prior-caches)
            (client/set-transport! prior-t)
            (active/set-digest-resolver! (fn [_] nil))
            (if prior-p

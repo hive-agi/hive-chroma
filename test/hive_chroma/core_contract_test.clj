@@ -3,18 +3,12 @@
    an active IMemoryStore (the atom-backed stub) and the concrete
    chroma.crud fallback over the in-memory transport."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
-            [hive-chroma.client :as client]
-            [hive-chroma.connection :as conn]
             [hive-chroma.core :as core]
             [hive-chroma.helpers :as h]
-            [hive-chroma.test.fixtures :as cfg]
-            [hive-chroma.test.host :as active]
-            [hive-chroma.test.memory-port :as pmem]
             [hive-chroma.test.fixtures :as fixtures]
-            [hive-chroma.stub.transport :as transport]
+            [hive-chroma.test.memory-port :as pmem]
             [hive-chroma.test.memory-store :as stub]
-            [hive-test.golden :refer [deftest-golden]]
-            [malli.instrument :as mi]))
+            [hive-test.golden :refer [deftest-golden]]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -26,22 +20,7 @@
     #'core/find-duplicate #'core/search-similar #'core/cleanup-expired!
     #'core/entries-expiring-soon})
 
-(defn- chroma-without-server [f]
-  (let [prior-transport (client/transport)
-        prior-provider  (active/get-embedding-provider)]
-    (client/set-transport! (transport/->transport))
-    (active/set-embedding-provider! (fixtures/->MockEmbedder 16))
-    (conn/reset-collection-cache!)
-    (mi/instrument! {:filters [(mi/-filter-var contracted)]})
-    (try
-      (cfg/with-config {:embedder {:no-embed-types #{} :routes {}}} (f))
-      (finally
-        (mi/unstrument! {:filters [(mi/-filter-var contracted)]})
-        (conn/reset-collection-cache!)
-        (client/set-transport! prior-transport)
-        (active/set-embedding-provider! prior-provider)))))
-
-(use-fixtures :each chroma-without-server)
+(use-fixtures :each (fixtures/chroma-without-server {:instrument contracted}))
 
 (defn- exercise
   "Drive every facade fn once; answer what a golden can pin (no ids, no clock)."
