@@ -18,7 +18,7 @@
         ;; embedding-space value layer and the backend host-services registry.
         io.github.hive-agi/hive-spi   {:mvn/version "1.4.18"}
         ;; IAddon contract.
-        io.github.hive-agi/hive-addon {:mvn/version "1.1.11"}
+        io.github.hive-agi/hive-addon {:mvn/version "1.1.13"}
         ;; Result DSL, read/write gates, bounded derefs.
         io.github.hive-agi/hive-dsl   {:mvn/version "0.6.2"}
         io.github.hive-agi/hive-weave {:mvn/version "0.4.7"}}
