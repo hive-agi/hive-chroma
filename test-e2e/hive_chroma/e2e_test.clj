@@ -18,7 +18,9 @@
             [hive-chroma.connection :as conn]
             [hive-chroma.e2e.sandbox :as sandbox]
             [hive-chroma.memory-test :as mc]
-            [hive-chroma.store-contract-runner-test :as runner]))
+            [hive-chroma.store-contract-runner-test :as runner]
+            [hive-dsl.result :as r]
+            [hive-spi.log.ports :as log]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -34,12 +36,20 @@
   ["hive-mcp-memory" "hive-mcp-memory-1024d" "hive-mcp-memory-4096d"])
 
 (defn- wipe!
-  "Delete the routed collections so each test starts from an empty Chroma."
+  "Delete the routed collections so each test starts from an empty Chroma.
+   A collection that is absent is already wiped. A failed delete is logged
+   and answered as an err Result, one per collection, so a suite that then
+   fails on leftover rows names the delete that did not happen."
   []
-  (doseq [n routed-collections]
-    (try (when-let [c (deref (client/get-collection n) 5000 nil)]
-           (deref (client/delete-collection c) 5000 nil))
-         (catch Throwable _ nil))))
+  (let [results (mapv (fn [n]
+                        (r/try-effect-throwable* :e2e/wipe-failed
+                          (when-let [c (deref (client/get-collection n) 5000 nil)]
+                            (deref (client/delete-collection c) 5000 nil))
+                          n))
+                      routed-collections)]
+    (doseq [res results :when (r/err? res)]
+      (log/warn "e2e wipe: a routed collection was not deleted:" res))
+    results))
 
 (defn- real-backend [port]
   (fn []

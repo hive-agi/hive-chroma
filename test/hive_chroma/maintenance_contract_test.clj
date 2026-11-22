@@ -2,7 +2,7 @@
   "Expiry cleanup and the expiring-soon window under instrumentation over the
    in-memory transport: entries are seeded with known durations and expiry
    instants, and the outcome is pinned as a golden."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.test :refer [deftest is use-fixtures]]
             [hive-chroma.crud :as crud]
             [hive-chroma.maintenance :as maint]
             [hive-chroma.test.fixtures :as fixtures]
