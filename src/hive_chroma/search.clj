@@ -12,7 +12,7 @@
 ;;
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 
-(def TagSet
+(def ^:private TagSet
   "Tags or project ids as callers hold them: any sequential or a set."
   [:maybe [:or [:sequential :any] [:set :any]]])
 
@@ -42,7 +42,7 @@
            NotContains
            [:map {:closed true} [:$and [:vector {:min 2} NotContains]]]]])
 
-(def Hit
+(def ^:private Hit
   "A search result record as the vendor returns it."
   [:map [:id :any]])
 

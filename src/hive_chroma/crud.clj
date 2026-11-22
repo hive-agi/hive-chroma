@@ -34,7 +34,7 @@
   (and (or (keyword? k) (string? k) (symbol? k))
        (= "embed-text" (name k))))
 
-(defn strip-transient
+(defn- strip-transient
   "X without its transient embed-text keys, at every depth: dropped from X
    when X is a map and from every map nested in X, through maps, sequences
    and sets. :embed-text is embedding input only; persisting it under any
@@ -59,7 +59,7 @@
 
     :else x))
 
-(defn embed-input
+(defn- embed-input
   "The text to embed for ENTRY: its transient :embed-text when the caller gave
    a string one (a sealing decorator whose :content is ciphertext), else
    DOC-TEXT, the document built from the stored content. A given :embed-text
